@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { OutputLine, ThemeName, ThemeColors } from '@/lib/terminal/types';
 import { fileSystem } from '@/lib/terminal/fileSystem';
 import { executeCommand, getTabCompletion, getGhostText } from '@/lib/terminal/commands';
+import { createProfileArtHTML } from '@/lib/terminal/profileArt';
 
 const THEMES: Record<ThemeName, ThemeColors> = {
   amber: {
@@ -310,7 +311,16 @@ export default function Terminal() {
       const doneT = setTimeout(() => {
         setIsBooting(false);
         setBootDone(true);
-        setTimeout(() => termRef.current?.focus(), 50);
+        // Show colorful profile art after boot
+        setTimeout(() => {
+          setOutput(prev => [
+            ...prev,
+            { id: `profile-${Date.now()}`, content: '', type: 'output' },
+            { id: `profile-art-${Date.now()}`, content: createProfileArtHTML(), type: 'html' },
+            { id: `profile-end-${Date.now()}`, content: '', type: 'output' },
+          ]);
+          setTimeout(() => termRef.current?.focus(), 50);
+        }, 200);
       }, bannerLines.length * 15 + 300);
       timeouts.push(doneT);
     }, 4000);
@@ -366,17 +376,26 @@ export default function Terminal() {
       }}>
         {/* Output */}
         {output.map(line => (
-          <div key={line.id} className="whitespace-pre-wrap break-all" style={{
-            color: line.type === 'error' ? colors.accent
-              : line.type === 'input' ? colors.textDim
-              : line.type === 'banner' ? colors.text
-              : line.type === 'boot' ? colors.textDim
-              : colors.text,
-            fontWeight: line.type === 'banner' ? 'bold' : 'normal',
-            fontSize: line.type === 'banner' ? '11px' : undefined,
-            lineHeight: line.type === 'banner' ? '1.1' : undefined,
-            letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
-          }}>{line.content || '\u00A0'}</div>
+          line.type === 'html' ? (
+            <div
+              key={line.id}
+              className="whitespace-pre"
+              style={{ lineHeight: '1.15', fontSize: '12px', letterSpacing: '0.5px' }}
+              dangerouslySetInnerHTML={{ __html: line.content }}
+            />
+          ) : (
+            <div key={line.id} className="whitespace-pre-wrap break-all" style={{
+              color: line.type === 'error' ? colors.accent
+                : line.type === 'input' ? colors.textDim
+                : line.type === 'banner' ? colors.text
+                : line.type === 'boot' ? colors.textDim
+                : colors.text,
+              fontWeight: line.type === 'banner' ? 'bold' : 'normal',
+              fontSize: line.type === 'banner' ? '11px' : undefined,
+              lineHeight: line.type === 'banner' ? '1.1' : undefined,
+              letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
+            }}>{line.content || '\u00A0'}</div>
+          )
         ))}
 
         {/* Input line */}

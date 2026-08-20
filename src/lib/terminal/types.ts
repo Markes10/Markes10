@@ -34,7 +34,7 @@ export interface TerminalState {
 export interface OutputLine {
   id: string;
   content: string;
-  type: 'system' | 'output' | 'error' | 'input' | 'banner' | 'boot';
+  type: 'system' | 'output' | 'error' | 'input' | 'banner' | 'boot' | 'html';
 }
 
 export interface CommandContext {

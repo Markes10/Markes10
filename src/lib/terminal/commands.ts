@@ -1,4 +1,5 @@
 import { CommandContext, FSNode, OutputLine, ThemeName } from './types';
+import { createProfileArtHTML } from './profileArt';
 
 let idCounter = 0;
 const uid = () => `line-${++idCounter}-${Date.now()}`;
@@ -63,6 +64,7 @@ export function executeCommand(
     clear: cmdClear,
     help: cmdHelp,
     projects: cmdProjects,
+    profile: cmdProfile,
   };
 
   const handler = commands[cmd];
@@ -112,11 +114,21 @@ function cmdCat(args: string[], ctx: CommandContext): OutputLine[] {
 
 function cmdWhoami(_args: string[], _ctx: CommandContext): OutputLine[] {
   return [
+    { id: uid(), content: createProfileArtHTML(), type: 'html' },
     { id: uid(), content: '', type: 'output' },
     { id: uid(), content: '  Name:     Dweepan Gain', type: 'output' },
     { id: uid(), content: '  Title:    AI/ML Engineer', type: 'output' },
     { id: uid(), content: '  Location: Vasco Da Gama, Goa, India', type: 'output' },
     { id: uid(), content: '  Pitch:    Building intelligent systems at the intersection of AI and software engineering.', type: 'output' },
+    { id: uid(), content: '', type: 'output' },
+  ];
+}
+
+function cmdProfile(_args: string[], _ctx: CommandContext): OutputLine[] {
+  return [
+    { id: uid(), content: createProfileArtHTML(), type: 'html' },
+    { id: uid(), content: '', type: 'output' },
+    { id: uid(), content: '  Dweepan Gain  |  AI/ML Engineer  |  Goa, India', type: 'output' },
     { id: uid(), content: '', type: 'output' },
   ];
 }
@@ -324,7 +336,8 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     { id: uid(), content: '    cat <file>          Display file contents', type: 'output' as const },
     { id: uid(), content: '', type: 'output' as const },
     { id: uid(), content: '  PORTFOLIO', type: 'output' as const },
-    { id: uid(), content: '    whoami              Display profile summary', type: 'output' as const },
+    { id: uid(), content: '    whoami              Display profile summary with portrait', type: 'output' as const },
+    { id: uid(), content: '    profile             Display colorful ASCII portrait', type: 'output' as const },
     { id: uid(), content: '    experience          Show work history', type: 'output' as const },
     { id: uid(), content: '    projects            List all projects', type: 'output' as const },
     { id: uid(), content: '    skills              Show technical skills', type: 'output' as const },
@@ -360,7 +373,7 @@ export function getTabCompletion(input: string, cwd: string, fs: FSNode): string
   if (parts.length <= 1) {
     // Complete command name
     const prefix = parts[0];
-    const commands = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects'];
+    const commands = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects', 'profile'];
     const match = commands.find(c => c.startsWith(prefix));
     return match ? match : input;
   }
@@ -391,7 +404,7 @@ export function getGhostText(input: string, cwd: string, fs: FSNode): string {
   const parts = input.split(/\s+/);
   if (parts.length <= 1) {
     const prefix = parts[0];
-    const commands = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'clear', 'help', 'projects'];
+    const commands = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects', 'profile'];
     const match = commands.find(c => c.startsWith(prefix));
     return match ? match.slice(prefix.length) : '';
   }

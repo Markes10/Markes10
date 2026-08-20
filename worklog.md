@@ -68,3 +68,26 @@ Stage Summary:
 - Colorful ASCII portrait with brown hair, peach skin, blue eyes, coral lips, blue shirt
 - Shows on boot, via whoami, and via profile command
 - Files modified: profileArt.ts (new), types.ts, commands.ts, Terminal.tsx
+---
+Task ID: 1
+Agent: Main Agent
+Task: Add GitHub README fetch on "github <repo-name>" + resize profile ASCII images everywhere
+
+Work Log:
+- Read all current source files (commands.ts, profileArt.ts, Terminal.tsx, imageToAscii.ts, types.ts)
+- Implemented `fetchGitHubRepo` to also fetch README.md from GitHub API (tries README.md, Readme.md, readme.md, README.rst, README.txt, README variants)
+- Built `buildReadmeHTML()` function: full markdown-to-HTML renderer supporting headings (h1-h4), code blocks with language labels, tables with header styling, bullet lists, blockquotes, inline code/bold/italic/links, horizontal rules, images (shown as links)
+- Built `inlineFormat()` helper for inline markdown formatting
+- Fixed table first-row detection using a `tableIsFirstRow` boolean flag
+- Resized profile ASCII art: profile card 70→40 cols, resume 50→28 cols, GitHub avatar 36→22 cols
+- Updated `imageToAscii.ts` cache to use `Record<number, string>` keyed by width (different sizes for different contexts)
+- Updated default width parameter from 70 to 40 across all functions
+- Updated GitHub avatar font-size from 6px to 5px to match smaller size
+- Updated help text: "github [repo]" now says "Show GitHub profile / repo README in terminal"
+- Verified build passes with no errors
+
+Stage Summary:
+- `github <repo-name>` now shows repo info header + fetches and renders the full README.md with terminal-styled markdown
+- Profile ASCII images are ~40-50% smaller across all contexts (boot profile, whoami, resume, GitHub)
+- All files modified: commands.ts, profileArt.ts, imageToAscii.ts
+

@@ -223,7 +223,7 @@ async function fetchGitHubProfile(appendOutput: (l: OutputLine[]) => void) {
     // Convert avatar to colourful ASCII
     let avatarAscii = '';
     try {
-      avatarAscii = await convertImageToAscii(user.avatar_url, 36, true);
+      avatarAscii = await convertImageToAscii(user.avatar_url, 22, true);
     } catch { /* avatar may fail due to CORS – fallback to text */ }
 
     const html = buildGitHubProfileHTML(user, repos, avatarAscii);
@@ -247,7 +247,9 @@ async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => 
     if (!res.ok) throw new Error(`Repository '${repo}' not found (HTTP ${res.status})`);
     const r: GHRepo = await res.json();
     const lc = langColor(r.language);
-    const html = `
+
+    // Build repo info header
+    const headerHTML = `
 <div style="margin:6px 0">
   <div style="font-size:16px;font-weight:bold;color:#ffb000">${r.name}</div>
   <div style="font-size:11px;color:#b37d00;margin-top:4px">${r.description || 'No description'}</div>
@@ -260,11 +262,52 @@ async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => 
   <div style="font-size:11px;color:#b37d00">${r.html_url}</div>
   ${r.topics.length ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${r.topics.map(t => `<span style="font-size:10px;background:#ffb00022;color:#ffb000;padding:2px 8px;border-radius:10px;border:1px solid #ffb00044">${t}</span>`).join('')}</div>` : ''}
 </div>`;
+
     appendOutput([
       { id: uid(), content: '', type: 'output' },
-      { id: uid(), content: html, type: 'html' },
-      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: headerHTML, type: 'html' },
+      { id: uid(), content: '  Fetching README.md...', type: 'output' },
     ]);
+
+    // Fetch README.md content
+    try {
+      // Try README.md first, then common variants
+      const readmeVariants = ['README.md', 'Readme.md', 'readme.md', 'README.rst', 'README.txt', 'README'];
+      let readmeContent: string | null = null;
+      let readmeName = '';
+
+      for (const name of readmeVariants) {
+        const readMeRes = await fetch(`https://api.github.com/repos/Markes10/${repo}/contents/${name}`);
+        if (readMeRes.ok) {
+          const fileData = await readMeRes.json();
+          if (fileData.content && fileData.encoding === 'base64') {
+            readmeContent = atob(fileData.content.replace(/\n/g, ''));
+            readmeName = name;
+            break;
+          }
+        }
+      }
+
+      if (readmeContent) {
+        // Render README in terminal-friendly format
+        const readmeHTML = buildReadmeHTML(readmeName, readmeContent);
+        appendOutput([
+          { id: uid(), content: '', type: 'output' },
+          { id: uid(), content: readmeHTML, type: 'html' },
+          { id: uid(), content: '', type: 'output' },
+        ]);
+      } else {
+        appendOutput([
+          { id: uid(), content: '  No README.md found in this repository.', type: 'output' },
+          { id: uid(), content: '', type: 'output' },
+        ]);
+      }
+    } catch (readmeErr: any) {
+      appendOutput([
+        { id: uid(), content: `  README fetch failed: ${readmeErr.message}`, type: 'error' },
+        { id: uid(), content: '', type: 'output' },
+      ]);
+    }
   } catch (err: any) {
     appendOutput([
       { id: uid(), content: '', type: 'output' },
@@ -272,6 +315,173 @@ async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => 
       { id: uid(), content: '', type: 'output' },
     ]);
   }
+}
+
+/** Convert raw README markdown to terminal-friendly HTML */
+function buildReadmeHTML(filename: string, raw: string): string {
+  const C = {
+    amber: '#ffb000', dim: '#b37d00', accent: '#ff6600',
+    border: '#ffb00033', white: '#e0e0e0', bg: '#ffb0000d',
+    link: '#3498DB', code: '#2ecc71', codeBg: '#ffb00015',
+  };
+
+  // Strip HTML tags from raw content (GitHub API may return rendered HTML in some cases)
+  let text = raw;
+
+  // Process line by line
+  const lines = text.split('\n');
+  const htmlParts: string[] = [];
+  let tableIsFirstRow = true;
+  let inCodeBlock = false;
+  let inList = false;
+  let inTable = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Code block toggle
+    if (line.trim().startsWith('```')) {
+      if (inCodeBlock) {
+        htmlParts.push('</div>');
+        inCodeBlock = false;
+      } else {
+        const lang = line.trim().slice(3).trim();
+        htmlParts.push(`<div style="margin:6px 0;padding:8px 12px;border-left:3px solid ${C.code};background:${C.codeBg};border-radius:0 5px 5px 0;font-size:11px;line-height:1.5">${lang ? `<div style="color:${C.code};font-size:9px;font-weight:bold;margin-bottom:6px;letter-spacing:1px">${lang.toUpperCase()}</div>` : ''}`);
+        inCodeBlock = true;
+      }
+      continue;
+    }
+
+    if (inCodeBlock) {
+      // Escape HTML entities in code blocks
+      const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      htmlParts.push(escaped + '<br/>');
+      continue;
+    }
+
+    // Table detection
+    if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
+      if (!inTable) {
+        htmlParts.push(`<div style="margin:6px 0;border:1px solid ${C.border};border-radius:5px;overflow:hidden">`);
+        inTable = true;
+        tableIsFirstRow = true;
+      }
+      // Skip separator rows (|---|---|)
+      if (/^\|[\s\-:|]+\|$/.test(line.trim())) {
+        tableIsFirstRow = false;
+        continue;
+      }
+
+      const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
+      const cellStyle = `padding:4px 10px;font-size:10px;border-bottom:1px solid ${C.border};${tableIsFirstRow ? `background:${C.bg};font-weight:bold;color:${C.amber}` : `color:${C.white}`}`;
+      htmlParts.push(`<div style="display:flex">${cells.map(c => `<div style="${cellStyle};flex:1">${inlineFormat(c)}</div>`).join('')}</div>`);
+      tableIsFirstRow = false;
+      continue;
+    }
+
+    if (inTable && !line.trim().startsWith('|')) {
+      htmlParts.push('</div>');
+      inTable = false;
+    }
+
+    // Close list if non-list line
+    if (inList && !line.trim().match(/^[-*+>]/) && line.trim() !== '') {
+      htmlParts.push('</div>');
+      inList = false;
+    }
+
+    // Empty line
+    if (line.trim() === '') {
+      htmlParts.push('<div style="height:6px"></div>');
+      continue;
+    }
+
+    // Headings
+    const h1Match = line.match(/^#\s+(.+)/);
+    const h2Match = line.match(/^##\s+(.+)/);
+    const h3Match = line.match(/^###\s+(.+)/);
+    const h4Match = line.match(/^####\s+(.+)/);
+
+    if (h1Match) {
+      htmlParts.push(`<div style="font-size:16px;font-weight:bold;color:${C.amber};margin:14px 0 8px;padding-bottom:6px;border-bottom:2px solid ${C.amber}">${inlineFormat(h1Match[1])}</div>`);
+      continue;
+    }
+    if (h2Match) {
+      htmlParts.push(`<div style="font-size:14px;font-weight:bold;color:${C.amber};margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid ${C.border}">${inlineFormat(h2Match[1])}</div>`);
+      continue;
+    }
+    if (h3Match) {
+      htmlParts.push(`<div style="font-size:12px;font-weight:bold;color:${C.accent};margin:10px 0 4px">&#9656; ${inlineFormat(h3Match[1])}</div>`);
+      continue;
+    }
+    if (h4Match) {
+      htmlParts.push(`<div style="font-size:11px;font-weight:bold;color:${C.dim};margin:8px 0 3px">  ${inlineFormat(h4Match[1])}</div>`);
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      htmlParts.push(`<div style="border:none;border-top:1px solid ${C.border};margin:10px 0"></div>`);
+      continue;
+    }
+
+    // List items
+    const listMatch = line.trim().match(/^([-*+])\s+(.+)/);
+    if (listMatch) {
+      if (!inList) {
+        htmlParts.push(`<div style="padding-left:12px;margin:2px 0">`);
+        inList = true;
+      }
+      htmlParts.push(`<div style="font-size:11px;color:${C.white};line-height:1.6;padding:1px 0"><span style="color:${C.amber};font-weight:bold">&#9656;</span> ${inlineFormat(listMatch[2])}</div>`);
+      continue;
+    }
+
+    // Blockquote
+    const quoteMatch = line.trim().match(/^>\s*(.*)/);
+    if (quoteMatch) {
+      htmlParts.push(`<div style="border-left:3px solid ${C.amber};padding:4px 12px;margin:4px 0;font-size:11px;color:${C.dim};font-style:italic;background:${C.bg}">${inlineFormat(quoteMatch[1])}</div>`);
+      continue;
+    }
+
+    // Image (show alt text as link since we can't render images)
+    const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
+    if (imgMatch) {
+      htmlParts.push(`<div style="font-size:11px;color:${C.link};margin:4px 0">[image: ${inlineFormat(imgMatch[1])}] ${imgMatch[2]}</div>`);
+      continue;
+    }
+
+    // Regular paragraph line
+    htmlParts.push(`<div style="font-size:11px;color:${C.white};line-height:1.65;margin:2px 0">${inlineFormat(line)}</div>`);
+  }
+
+  // Close any open containers
+  if (inCodeBlock) htmlParts.push('</div>');
+  if (inList) htmlParts.push('</div>');
+  if (inTable) htmlParts.push('</div>');
+
+  return `
+<div style="margin:8px 0;padding:12px 16px;border:1px solid ${C.border};border-radius:8px;background:${C.bg}">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${C.border}">
+    <span style="color:${C.amber};font-size:14px">&#128196;</span>
+    <span style="color:${C.amber};font-size:12px;font-weight:bold;letter-spacing:1px">${filename.toUpperCase()}</span>
+  </div>
+  ${htmlParts.join('')}
+</div>`;
+}
+
+/** Inline markdown formatting: bold, italic, code, links */
+function inlineFormat(text: string): string {
+  // Escape HTML
+  let s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, '<code style="background:#ffb00018;color:#2ecc71;padding:1px 5px;border-radius:3px;font-size:10px">$1</code>');
+  // Bold
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<b style="color:#ffb000">$1</b>');
+  // Italic
+  s = s.replace(/\*([^*]+)\*/g, '<i style="color:#e0e0e0">$1</i>');
+  // Links
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a style="color:#3498DB;text-decoration:underline" href="$2" target="_blank" rel="noopener">$1</a>');
+  return s;
 }
 
 function langColor(lang: string | null): string {
@@ -306,7 +516,7 @@ function buildGitHubProfileHTML(user: GHUser, repos: GHRepo[], avatarAscii: stri
 <div style="margin:6px 0">
   <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:16px">
     ${avatarAscii
-      ? `<div style="flex-shrink:0;line-height:1.05;font-size:6px;letter-spacing:0">${avatarAscii.replace(/\n/g, '<br/>')}</div>`
+      ? `<div style="flex-shrink:0;line-height:1.05;font-size:5px;letter-spacing:0">${avatarAscii.replace(/\n/g, '<br/>')}</div>`
       : `<img src="${user.avatar_url}" style="width:72px;height:72px;border-radius:50%;border:2px solid #ffb000" />`}
     <div style="padding-top:4px">
       <div style="font-size:18px;font-weight:bold;color:#ffb000">${user.name || user.login}</div>
@@ -375,7 +585,7 @@ function downloadResumeFile() {
 async function buildAsyncResumeHTML(): Promise<string> {
   let asciiPhoto = '';
   try {
-    asciiPhoto = await getProfileAscii(50);
+    asciiPhoto = await getProfileAscii(28);
   } catch { /* fallback to empty */ }
   return buildColorfulResumeHTML(asciiPhoto);
 }
@@ -625,7 +835,7 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     L('    education           Show education history'),
     L('    contact             Show contact information'),
     L('    resume              Show colorful resume + download'),
-    L('    github [repo]       Show GitHub profile/repos in terminal'), L(''),
+    L('    github [repo]       Show GitHub profile / repo README in terminal'), L(''),
     L('  SYSTEM'),
     L('    theme <amber|green|white>  Switch terminal color theme'),
     L('    crt                 Toggle CRT scanline effect'),

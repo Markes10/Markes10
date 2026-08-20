@@ -7,19 +7,19 @@
 
 // ── Public API ────────────────────────────────────────────────────────────
 
-/** Cached result for the local profile photo */
-let profileCache: string | null = null;
+/** Cached results keyed by targetWidth */
+const profileCache: Record<number, string> = {};
 
 /**
  * Returns a cached colorful ASCII rendering of /profile.jpg.
  * On first call it generates and caches; subsequent calls return instantly.
  */
 export async function getProfileAscii(
-  targetWidth: number = 70,
+  targetWidth: number = 40,
 ): Promise<string> {
-  if (profileCache) return profileCache;
-  profileCache = await convertImageToAscii('/profile.jpg', targetWidth);
-  return profileCache;
+  if (profileCache[targetWidth]) return profileCache[targetWidth];
+  profileCache[targetWidth] = await convertImageToAscii('/profile.jpg', targetWidth);
+  return profileCache[targetWidth];
 }
 
 /**
@@ -28,7 +28,7 @@ export async function getProfileAscii(
  */
 export async function convertImageToAscii(
   src: string,
-  targetWidth: number = 70,
+  targetWidth: number = 40,
   crossOrigin: boolean = false,
 ): Promise<string> {
   if (typeof document === 'undefined') return '';

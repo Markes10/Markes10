@@ -10,7 +10,7 @@ import { getProfileAscii } from './imageToAscii';
 export async function createProfileCardHTML(): Promise<string> {
   let asciiPortrait: string;
   try {
-    asciiPortrait = await getProfileAscii(70);
+    asciiPortrait = await getProfileAscii(40);
   } catch {
     asciiPortrait = '[profile photo unavailable]';
   }

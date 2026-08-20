@@ -116,10 +116,8 @@ function cmdWhoami(_args: string[], _ctx: CommandContext): OutputLine[] {
   return [
     { id: uid(), content: createProfileArtHTML(), type: 'html' },
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: '  Name:     Dweepan Gain', type: 'output' },
-    { id: uid(), content: '  Title:    AI/ML Engineer', type: 'output' },
-    { id: uid(), content: '  Location: Vasco Da Gama, Goa, India', type: 'output' },
-    { id: uid(), content: '  Pitch:    Building intelligent systems at the intersection of AI and software engineering.', type: 'output' },
+    { id: uid(), content: '  Building intelligent systems at the intersection of', type: 'output' },
+    { id: uid(), content: '  AI and software engineering.', type: 'output' },
     { id: uid(), content: '', type: 'output' },
   ];
 }
@@ -127,8 +125,6 @@ function cmdWhoami(_args: string[], _ctx: CommandContext): OutputLine[] {
 function cmdProfile(_args: string[], _ctx: CommandContext): OutputLine[] {
   return [
     { id: uid(), content: createProfileArtHTML(), type: 'html' },
-    { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: '  Dweepan Gain  |  AI/ML Engineer  |  Goa, India', type: 'output' },
     { id: uid(), content: '', type: 'output' },
   ];
 }
@@ -164,22 +160,165 @@ function cmdEducation(_args: string[], ctx: CommandContext): OutputLine[] {
   return [{ id: uid(), content: 'education: data not found', type: 'error' }];
 }
 
-function cmdGithub(args: string[], _ctx: CommandContext): OutputLine[] {
-  const baseUrl = 'https://github.com/Markes10';
-  if (args[0]) {
-    const url = `${baseUrl}/${args[0]}`;
-    if (typeof window !== 'undefined') window.open(url, '_blank');
-    return [{ id: uid(), content: `Opening ${url} ...`, type: 'output' }];
+// ── GitHub: fetch API and display in terminal ──────────────────────────
+function cmdGithub(args: string[], ctx: CommandContext): OutputLine[] {
+  if (typeof window === 'undefined') {
+    return [{ id: uid(), content: 'github: not available in SSR', type: 'error' }];
   }
-  if (typeof window !== 'undefined') window.open(baseUrl, '_blank');
-  return [
+
+  const username = 'Markes10';
+
+  // Show a loading spinner immediately
+  const loadingLines: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: `  GitHub: ${baseUrl}`, type: 'output' },
-    { id: uid(), content: '  Opening in new tab...', type: 'output' },
-    { id: uid(), content: '', type: 'output' },
+    { id: uid(), content: `  Fetching GitHub data for <span style="color:#ffb000;font-weight:bold">${username}</span>...`, type: 'html' },
   ];
+
+  // Async fetch – append results via appendOutput
+  if (args[0]) {
+    // Specific repo
+    const repo = args[0];
+    fetchGitHubRepo(username, repo, ctx.appendOutput);
+  } else {
+    fetchGitHubProfile(username, ctx.appendOutput);
+  }
+
+  return loadingLines;
 }
 
+interface GitHubUser {
+  login: string; name: string | null; bio: string | null;
+  public_repos: number; followers: number; following: number;
+  location: string | null; blog: string | null; twitter_username: string | null;
+  created_at: string; avatar_url: string;
+}
+
+interface GitHubRepo {
+  name: string; description: string | null; language: string | null;
+  stargazers_count: number; forks_count: number;
+  html_url: string; updated_at: string; topics: string[];
+}
+
+async function fetchGitHubProfile(username: string, appendOutput: (lines: OutputLine[]) => void) {
+  try {
+    const [userRes, reposRes] = await Promise.all([
+      fetch(`https://api.github.com/users/${username}`),
+      fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=10`),
+    ]);
+    if (!userRes.ok) throw new Error(`GitHub API returned ${userRes.status}`);
+    const user: GitHubUser = await userRes.json();
+    const repos: GitHubRepo[] = reposRes.ok ? await reposRes.json() : [];
+
+    const lines: OutputLine[] = [
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: buildGitHubProfileHTML(user, repos), type: 'html' },
+      { id: uid(), content: '', type: 'output' },
+    ];
+    appendOutput(lines);
+  } catch (err: any) {
+    appendOutput([
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: `  github: error - ${err.message}`, type: 'error' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  }
+}
+
+async function fetchGitHubRepo(username: string, repo: string, appendOutput: (lines: OutputLine[]) => void) {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${username}/${repo}`);
+    if (!res.ok) throw new Error(`Repository '${repo}' not found (HTTP ${res.status})`);
+    const repoData: GitHubRepo = await res.json();
+
+    const langColors: Record<string, string> = {
+      Python: '#3572A5', JavaScript: '#f1e05a', TypeScript: '#3178c6',
+      'Jupyter Notebook': '#DA5B0B', HTML: '#e34c26', CSS: '#563d7c',
+      Shell: '#89e051', Dockerfile: '#384d54', Go: '#00ADD8',
+    };
+    const langColor = langColors[repoData.language || ''] || '#8b949e';
+
+    const html = `
+<div style="margin:6px 0">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+    <img src="${repoData.html_url}/raw/master/demo.png" 
+         onerror="this.style.display='none'"
+         style="width:80px;height:80px;border-radius:8px;border:1px solid #ffb00044;object-fit:cover" />
+    <div>
+      <div style="font-size:16px;font-weight:bold;color:#ffb000">${repoData.name}</div>
+      <div style="font-size:11px;color:#b37d00;margin-top:4px">${repoData.description || 'No description'}</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:20px;font-size:12px;margin-bottom:12px;flex-wrap:wrap">
+    <span style="color:#ffb000">&#9733; ${repoData.stargazers_count}</span>
+    <span style="color:#ffb000">&#128268; ${repoData.forks_count} forks</span>
+    <span>Lang: <span style="color:${langColor};font-weight:bold">${repoData.language || 'N/A'}</span></span>
+    <span>Updated: ${new Date(repoData.updated_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+  </div>
+  <div style="font-size:11px;color:#b37d00">${repoData.html_url}</div>
+  ${repoData.topics.length ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${repoData.topics.map(t => `<span style="font-size:10px;background:#ffb00022;color:#ffb000;padding:2px 8px;border-radius:10px;border:1px solid #ffb00044">${t}</span>`).join('')}</div>` : ''}
+</div>`;
+
+    appendOutput([
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: html, type: 'html' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  } catch (err: any) {
+    appendOutput([
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: `  github: ${err.message}`, type: 'error' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  }
+}
+
+function buildGitHubProfileHTML(user: GitHubUser, repos: GitHubRepo[]): string {
+  const langColors: Record<string, string> = {
+    Python: '#3572A5', JavaScript: '#f1e05a', TypeScript: '#3178c6',
+    'Jupyter Notebook': '#DA5B0B', HTML: '#e34c26', CSS: '#563d7c',
+    Shell: '#89e051', Dockerfile: '#384d54', Go: '#00ADD8',
+  };
+
+  const topRepos = repos.slice(0, 8);
+  const reposHTML = topRepos.map(r => {
+    const lc = langColors[r.language || ''] || '#8b949e';
+    return `
+    <div style="padding:10px 14px;border:1px solid #ffb00022;border-radius:6px;background:#ffb00008">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:#ffb000;font-weight:bold;font-size:13px">${r.name}</span>
+        <span style="font-size:11px;color:${lc}">${r.language || ''}</span>
+      </div>
+      <div style="font-size:11px;color:#b37d00;margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:500px">${r.description || ''}</div>
+      <div style="display:flex;gap:14px;margin-top:6px;font-size:11px">
+        <span style="color:#ffb000">&#9733; ${r.stargazers_count}</span>
+        <span>&#128268; ${r.forks_count}</span>
+        <span style="color:#707070">${new Date(r.updated_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `
+<div style="margin:6px 0">
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+    <img src="${user.avatar_url}" style="width:72px;height:72px;border-radius:50%;border:2px solid #ffb000" />
+    <div>
+      <div style="font-size:18px;font-weight:bold;color:#ffb000">${user.name || user.login}</div>
+      <div style="font-size:11px;color:#b37d00;margin-top:3px">${user.bio || ''}</div>
+      <div style="font-size:11px;color:#707070;margin-top:6px">${user.location || ''} ${user.blog ? '&middot; ' + user.blog : ''}</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:24px;margin-bottom:18px;font-size:13px">
+    <div><span style="color:#ffb000;font-weight:bold;font-size:20px">${user.public_repos}</span><br/><span style="color:#707070;font-size:10px">REPOS</span></div>
+    <div><span style="color:#ffb000;font-weight:bold;font-size:20px">${user.followers}</span><br/><span style="color:#707070;font-size:10px">FOLLOWERS</span></div>
+    <div><span style="color:#ffb000;font-weight:bold;font-size:20px">${user.following}</span><br/><span style="color:#707070;font-size:10px">FOLLOWING</span></div>
+    <div><span style="color:#ffb000;font-weight:bold;font-size:20px">${new Date(user.created_at).getFullYear()}</span><br/><span style="color:#707070;font-size:10px">JOINED</span></div>
+  </div>
+  <div style="color:#ffb000;font-size:12px;font-weight:bold;margin-bottom:10px;letter-spacing:1px">&#9656; TOP REPOSITORIES</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${reposHTML}</div>
+</div>`;
+}
+
+// ── Contact ─────────────────────────────────────────────────────────────
 function cmdContact(_args: string[], ctx: CommandContext): OutputLine[] {
   const contactNode = getNode(ctx.fs, '/contact/contact.txt');
   const lines: OutputLine[] = [];
@@ -197,13 +336,15 @@ function cmdContact(_args: string[], ctx: CommandContext): OutputLine[] {
   return lines;
 }
 
+// ── Resume (colorful HTML with photo) ────────────────────────────────────
 function cmdResume(_args: string[], _ctx: CommandContext): OutputLine[] {
-  // Generate a simple text resume and download it
-  if (typeof window === 'undefined') return [{ id: uid(), content: 'resume: not available in SSR', type: 'error' }];
+  if (typeof window === 'undefined') {
+    return [{ id: uid(), content: 'resume: not available in SSR', type: 'error' }];
+  }
 
-  // Build resume content
-  const content = buildResumeText();
-  const blob = new Blob([content], { type: 'text/plain' });
+  // Also trigger download
+  const textContent = buildResumeText();
+  const blob = new Blob([textContent], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -214,11 +355,155 @@ function cmdResume(_args: string[], _ctx: CommandContext): OutputLine[] {
   URL.revokeObjectURL(url);
 
   return [
+    { id: uid(), content: buildColorfulResumeHTML(), type: 'html' },
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: '  Downloading resume...', type: 'output' },
-    { id: uid(), content: '  File: Dweepan_Gain_Resume.txt', type: 'output' },
+    { id: uid(), content: '  Resume file downloaded: Dweepan_Gain_Resume.txt', type: 'output' },
     { id: uid(), content: '', type: 'output' },
   ];
+}
+
+function buildColorfulResumeHTML(): string {
+  const C = {
+    amber: '#ffb000', dim: '#b37d00', accent: '#ff6600',
+    bg: '#0d0d00', card: '#ffb0000d', border: '#ffb00033',
+    blue: '#3498DB', green: '#2ecc71', purple: '#a855f7',
+    red: '#e74c3c', cyan: '#00bcd4', white: '#e0e0e0',
+  };
+
+  const section = (icon: string, title: string, color: string) =>
+    `<div style="display:flex;align-items:center;gap:8px;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid ${C.border}">
+      <span style="color:${color};font-size:14px">${icon}</span>
+      <span style="color:${color};font-size:13px;font-weight:bold;letter-spacing:2px">${title}</span>
+    </div>`;
+
+  const bullet = (text: string, sub = false) =>
+    `<div style="font-size:11px;color:${sub ? C.dim : C.white};line-height:1.55;padding-left:${sub ? 20 : 12}px;position:relative;margin:2px 0">
+      <span style="position:absolute;left:0;color:${C.amber}">${sub ? '&middot;' : '&#9656;'}</span>${text}
+    </div>`;
+
+  const expBlock = (title: string, company: string, period: string, color: string, points: string[]) => `
+    <div style="margin-bottom:14px;padding:10px 14px;border-left:3px solid ${color};background:${C.card};border-radius:0 6px 6px 0">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px">
+        <div>
+          <span style="color:${C.amber};font-weight:bold;font-size:13px">${title}</span>
+          <span style="color:${C.dim};font-size:11px"> @ ${company}</span>
+        </div>
+        <span style="color:${color};font-size:10px;font-weight:bold">${period}</span>
+      </div>
+      ${points.map(p => bullet(p, true)).join('')}
+    </div>`;
+
+  return `
+<div style="max-width:680px;margin:6px auto">
+  <!-- Header -->
+  <div style="display:flex;align-items:center;gap:18px;padding:16px 20px;background:${C.card};border:1px solid ${C.border};border-radius:10px;margin-bottom:4px">
+    <img src="/profile.jpg" style="width:90px;height:90px;border-radius:10px;border:2px solid ${C.amber};object-fit:cover" />
+    <div>
+      <div style="font-size:22px;font-weight:bold;color:${C.amber};letter-spacing:1px">DWEEPAN GAIN</div>
+      <div style="font-size:13px;color:${C.accent};margin:4px 0 8px">AI / ML Engineer</div>
+      <div style="font-size:11px;color:${C.dim};line-height:1.7">
+        <span style="color:${C.amber}">&#9679;</span> Vasco Da Gama, Goa, India &nbsp;&nbsp;
+        <span style="color:${C.amber}">&#9679;</span> +91 8485841623<br/>
+        <span style="color:${C.amber}">&#9679;</span> dweepangain11dec99@gmail.com &nbsp;&nbsp;
+        <span style="color:${C.amber}">&#9679;</span> github.com/Markes10
+      </div>
+    </div>
+  </div>
+
+  <!-- Summary -->
+  <div style="font-size:11px;color:${C.white};line-height:1.7;padding:8px 0">
+    Results-driven AI/ML Engineer specializing in production-grade intelligent systems.
+    Deep expertise in LLMs, NLP, and machine learning with strong full-stack
+    development foundation. Building end-to-end solutions bridging research
+    and real-world business impact.
+  </div>
+
+  ${section('&#128187;', 'EXPERIENCE', C.blue)}
+
+  ${expBlock('AI/ML Engineer', 'Labmentix', 'Jan 2024 - Present', C.blue, [
+    'Architected AI-powered CRM + PIM platform for enterprise clients with LLM-based extraction',
+    'Built ML pipelines reducing manual data entry by 60% across client operations',
+    'Led prompt engineering initiatives improving extraction accuracy to 94%',
+    'Designed RESTful APIs handling 10K+ daily requests with sub-200ms response times',
+  ])}
+
+  ${expBlock('Software Developer', 'Demerg Systems', 'Jun 2023 - Dec 2023', C.green, [
+    'Developed full-stack B2B SaaS applications using React, Node.js, and PostgreSQL',
+    'Implemented real-time data sync via WebSockets, reducing latency by 40%',
+    'Optimized database queries improving API throughput by 3x under high concurrency',
+  ])}
+
+  ${expBlock('AI/ML Intern', 'JYESTA', 'Jan 2023 - May 2023', C.purple, [
+    'Built AI email assistant using OpenAI GPT APIs and Python with NLP classification',
+    'Achieved 89% accuracy on email classification models for domain-specific routing',
+    'Created FastAPI REST endpoints for model serving with seamless product integration',
+  ])}
+
+  ${expBlock('Web Dev Intern', 'Tentwenty Digital', 'Aug 2022 - Dec 2022', C.cyan, [
+    'Built responsive React websites with animated UI components using Framer Motion',
+    'Optimized site performance achieving Lighthouse scores above 90 across all projects',
+  ])}
+
+  ${section('&#128736;', 'PROJECTS', C.accent)}
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+    ${[
+      ['AI CRM + PIM', 'Python, FastAPI, React, GPT-4, LangChain', C.blue],
+      ['AI Email Assistant', 'Python, GPT-4, NLP, SpaCy', C.green],
+      ['Resume Analyzer', 'Python, NLP, scikit-learn', C.purple],
+      ['Fraud Detection', 'XGBoost, Random Forest, Flask', C.red],
+      ['Medical Report Analyzer', 'OCR, NLP, FastAPI, React', C.cyan],
+      ['Secure Chat App', 'React, Socket.IO, AES-256', C.amber],
+      ['Social Media Monitor', 'NLP, VADER, Elasticsearch', C.green],
+    ].map(([name, stack, color]) => `
+      <div style="padding:8px 12px;border:1px solid ${color}33;border-radius:6px;background:${color}0d">
+        <div style="color:${color};font-weight:bold;font-size:11px">${name}</div>
+        <div style="color:${C.dim};font-size:10px;margin-top:3px">${stack}</div>
+      </div>`).join('')}
+  </div>
+
+  ${section('&#128218;', 'SKILLS', C.green)}
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:11px">
+    ${[
+      ['Languages', 'Python, JavaScript, TypeScript, SQL, Bash, C++'],
+      ['AI / LLM', 'GPT-4, LangChain, Prompt Engineering, Fine-Tuning, RAG'],
+      ['Machine Learning', 'Scikit-learn, XGBoost, Neural Networks, Feature Engineering'],
+      ['Frontend', 'React, Next.js, Tailwind CSS, Framer Motion, GSAP'],
+      ['Backend', 'Node.js, Express, FastAPI, Flask, WebSockets'],
+      ['Cloud & DevOps', 'AWS, Docker, CI/CD, Git, GitHub Actions, Nginx'],
+      ['Databases', 'PostgreSQL, MongoDB, Redis, Elasticsearch'],
+      ['Data Science', 'Pandas, NumPy, Matplotlib, EDA, A/B Testing'],
+    ].map(([cat, skills]) => `
+      <div style="margin:3px 0">
+        <span style="color:${C.amber};font-weight:bold">${cat}:</span>
+        <span style="color:${C.white}">${skills}</span>
+      </div>`).join('')}
+  </div>
+
+  ${section('&#127891;', 'EDUCATION', C.purple)}
+
+  <div style="padding:10px 14px;border-left:3px solid ${C.purple};background:${C.card};border-radius:0 6px 6px 0">
+    <div style="color:${C.amber};font-weight:bold;font-size:13px">B.E. Computer Engineering</div>
+    <div style="color:${C.dim};font-size:11px;margin-top:3px">Goa College of Engineering, Farmagudi, Goa &middot; 2019 - 2023</div>
+    <div style="color:${C.white};font-size:10px;margin-top:6px;line-height:1.6">
+      Relevant: Data Structures & Algorithms, Machine Learning, Deep Learning,
+      Database Management, Operating Systems, Computer Networks, Software Engineering
+    </div>
+  </div>
+
+  <div style="margin-top:14px;padding:10px 14px;border-left:3px solid ${C.cyan};background:${C.card};border-radius:0 6px 6px 0">
+    <div style="color:${C.amber};font-weight:bold;font-size:12px">Certifications</div>
+    ${['Deep Learning Specialization - Coursera (Andrew Ng)', 'AWS Cloud Practitioner - Amazon Web Services', 'NLP Specialization - Coursera'].map(c =>
+      `<div style="color:${C.white};font-size:10px;margin-top:4px;padding-left:12px;position:relative"><span style="position:absolute;left:0;color:${C.cyan}">&#9656;</span>${c}</div>`
+    ).join('')}
+    </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;margin-top:20px;padding-top:12px;border-top:1px solid ${C.border};font-size:10px;color:${C.dim}">
+    Generated by RETROSHELL &middot; github.com/Markes10
+  </div>
+</div>`;
 }
 
 function buildResumeText(): string {
@@ -293,6 +578,7 @@ B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
 `;
 }
 
+// ── System commands ──────────────────────────────────────────────────────
 function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
   const validThemes: ThemeName[] = ['amber', 'green', 'white'];
   if (!args[0]) {
@@ -336,15 +622,15 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     { id: uid(), content: '    cat <file>          Display file contents', type: 'output' as const },
     { id: uid(), content: '', type: 'output' as const },
     { id: uid(), content: '  PORTFOLIO', type: 'output' as const },
-    { id: uid(), content: '    whoami              Display profile summary with portrait', type: 'output' as const },
-    { id: uid(), content: '    profile             Display colorful ASCII portrait', type: 'output' as const },
+    { id: uid(), content: '    whoami              Display profile with photo', type: 'output' as const },
+    { id: uid(), content: '    profile             Display profile photo card', type: 'output' as const },
     { id: uid(), content: '    experience          Show work history', type: 'output' as const },
     { id: uid(), content: '    projects            List all projects', type: 'output' as const },
     { id: uid(), content: '    skills              Show technical skills', type: 'output' as const },
     { id: uid(), content: '    education           Show education history', type: 'output' as const },
     { id: uid(), content: '    contact             Show contact information', type: 'output' as const },
-    { id: uid(), content: '    resume              Download resume file', type: 'output' as const },
-    { id: uid(), content: '    github [repo]       Open GitHub (or specific repo)', type: 'output' as const },
+    { id: uid(), content: '    resume              Show colorful resume + download file', type: 'output' as const },
+    { id: uid(), content: '    github [repo]       Show GitHub profile/repos in terminal', type: 'output' as const },
     { id: uid(), content: '', type: 'output' as const },
     { id: uid(), content: '  SYSTEM', type: 'output' as const },
     { id: uid(), content: '    theme <amber|green|white>  Switch terminal color theme', type: 'output' as const },
@@ -367,18 +653,17 @@ function cmdProjects(_args: string[], ctx: CommandContext): OutputLine[] {
   return cmdLs(['/projects'], { ...ctx, cwd: '/' });
 }
 
-// Tab completion logic
+// ── Tab completion ───────────────────────────────────────────────────────
+const ALL_COMMANDS = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects', 'profile'];
+
 export function getTabCompletion(input: string, cwd: string, fs: FSNode): string {
   const parts = input.split(/\s+/);
   if (parts.length <= 1) {
-    // Complete command name
     const prefix = parts[0];
-    const commands = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects', 'profile'];
-    const match = commands.find(c => c.startsWith(prefix));
+    const match = ALL_COMMANDS.find(c => c.startsWith(prefix));
     return match ? match : input;
   }
 
-  // Complete file/folder path
   const cmd = parts[0];
   if (!['ls', 'cd', 'cat'].includes(cmd)) return input;
 
@@ -404,8 +689,7 @@ export function getGhostText(input: string, cwd: string, fs: FSNode): string {
   const parts = input.split(/\s+/);
   if (parts.length <= 1) {
     const prefix = parts[0];
-    const commands = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects', 'profile'];
-    const match = commands.find(c => c.startsWith(prefix));
+    const match = ALL_COMMANDS.find(c => c.startsWith(prefix));
     return match ? match.slice(prefix.length) : '';
   }
   const cmd = parts[0];

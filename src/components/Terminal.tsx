@@ -228,6 +228,7 @@ export default function Terminal() {
           setTheme: handleTheme,
           setCrt: (v: boolean) => stableDispatch.current.setCrtOn(v),
           setKeys: (v: boolean) => stableDispatch.current.setKeysOn(v),
+          appendOutput: (lines: OutputLine[]) => setOutput(prev => [...prev, ...lines]),
           crtOn: s.crtOn, keysOn: s.keysOn,
         } as any;
 

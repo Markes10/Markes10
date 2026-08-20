@@ -45,4 +45,5 @@ export interface CommandContext {
   setTheme: (theme: ThemeName) => void;
   setCrt: (on: boolean) => void;
   setKeys: (on: boolean) => void;
+  appendOutput: (lines: OutputLine[]) => void;
 }

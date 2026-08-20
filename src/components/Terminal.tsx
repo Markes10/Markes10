@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { OutputLine, ThemeName, ThemeColors } from '@/lib/terminal/types';
 import { fileSystem } from '@/lib/terminal/fileSystem';
 import { executeCommand, getTabCompletion, getGhostText } from '@/lib/terminal/commands';
-import { createProfileArtHTML } from '@/lib/terminal/profileArt';
+import { createProfileCardHTML } from '@/lib/terminal/profileArt';
 
 const THEMES: Record<ThemeName, ThemeColors> = {
   amber: {
@@ -312,15 +312,21 @@ export default function Terminal() {
       const doneT = setTimeout(() => {
         setIsBooting(false);
         setBootDone(true);
-        // Show colorful profile art after boot
+        // Show colorful ASCII profile portrait after boot
         setTimeout(() => {
           setOutput(prev => [
             ...prev,
             { id: `profile-${Date.now()}`, content: '', type: 'output' },
-            { id: `profile-art-${Date.now()}`, content: createProfileArtHTML(), type: 'html' },
-            { id: `profile-end-${Date.now()}`, content: '', type: 'output' },
+            { id: `profile-loading-${Date.now()}`, content: '  Rendering profile portrait...', type: 'output' },
           ]);
-          setTimeout(() => termRef.current?.focus(), 50);
+          createProfileCardHTML().then(html => {
+            setOutput(prev => [
+              ...prev.slice(0, -1), // remove loading line
+              { id: `profile-art-${Date.now()}`, content: html, type: 'html' },
+              { id: `profile-end-${Date.now()}`, content: '', type: 'output' },
+            ]);
+            setTimeout(() => termRef.current?.focus(), 50);
+          });
         }, 200);
       }, bannerLines.length * 15 + 300);
       timeouts.push(doneT);

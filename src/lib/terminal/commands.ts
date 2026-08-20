@@ -1,5 +1,6 @@
 import { CommandContext, FSNode, OutputLine, ThemeName } from './types';
-import { createProfileArtHTML } from './profileArt';
+import { createProfileCardHTML } from './profileArt';
+import { getProfileAscii, convertImageToAscii } from './imageToAscii';
 
 let idCounter = 0;
 const uid = () => `line-${++idCounter}-${Date.now()}`;
@@ -85,12 +86,11 @@ function cmdLs(args: string[], ctx: CommandContext): OutputLine[] {
     if (aDir !== bDir) return aDir - bDir;
     return a.localeCompare(b);
   });
-  const lines = entries.map(name => {
+  return entries.map(name => {
     const child = node.children![name];
     const suffix = child.type === 'directory' ? '/' : '';
     return { id: uid(), content: `  ${name}${suffix}`, type: 'output' as const };
   });
-  return lines;
 }
 
 function cmdCd(args: string[], ctx: CommandContext): OutputLine[] {
@@ -112,27 +112,48 @@ function cmdCat(args: string[], ctx: CommandContext): OutputLine[] {
   return node.content!.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
 }
 
-function cmdWhoami(_args: string[], _ctx: CommandContext): OutputLine[] {
-  return [
-    { id: uid(), content: createProfileArtHTML(), type: 'html' },
+// ── Profile & Whoami (async – ASCII photo) ───────────────────────────
+function cmdProfile(_args: string[], ctx: CommandContext): OutputLine[] {
+  if (typeof window === 'undefined') {
+    return [{ id: uid(), content: 'profile: not available in SSR', type: 'error' }];
+  }
+  const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: '  Building intelligent systems at the intersection of', type: 'output' },
-    { id: uid(), content: '  AI and software engineering.', type: 'output' },
-    { id: uid(), content: '', type: 'output' },
+    { id: uid(), content: '  Rendering profile portrait...', type: 'output' },
   ];
+  createProfileCardHTML().then(html => {
+    ctx.appendOutput([
+      { id: uid(), content: html, type: 'html' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  });
+  return loading;
 }
 
-function cmdProfile(_args: string[], _ctx: CommandContext): OutputLine[] {
-  return [
-    { id: uid(), content: createProfileArtHTML(), type: 'html' },
+function cmdWhoami(_args: string[], ctx: CommandContext): OutputLine[] {
+  if (typeof window === 'undefined') {
+    return [{ id: uid(), content: 'whoami: not available in SSR', type: 'error' }];
+  }
+  const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
+    { id: uid(), content: '  Loading profile...', type: 'output' },
   ];
+  createProfileCardHTML().then(html => {
+    ctx.appendOutput([
+      { id: uid(), content: html, type: 'html' },
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: '  Building intelligent systems at the intersection of', type: 'output' },
+      { id: uid(), content: '  AI and software engineering.', type: 'output' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  });
+  return loading;
 }
 
 function cmdSkills(_args: string[], ctx: CommandContext): OutputLine[] {
-  const skillsNode = getNode(ctx.fs, '/skills/skills.txt');
-  if (skillsNode?.content) {
-    return skillsNode.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
+  const node = getNode(ctx.fs, '/skills/skills.txt');
+  if (node?.content) {
+    return node.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
   }
   return [{ id: uid(), content: 'skills: data not found', type: 'error' }];
 }
@@ -153,68 +174,64 @@ function cmdExperience(_args: string[], ctx: CommandContext): OutputLine[] {
 }
 
 function cmdEducation(_args: string[], ctx: CommandContext): OutputLine[] {
-  const eduNode = getNode(ctx.fs, '/education/education.txt');
-  if (eduNode?.content) {
-    return eduNode.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
+  const node = getNode(ctx.fs, '/education/education.txt');
+  if (node?.content) {
+    return node.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
   }
   return [{ id: uid(), content: 'education: data not found', type: 'error' }];
 }
 
-// ── GitHub: fetch API and display in terminal ──────────────────────────
+// ── GitHub (async – ASCII avatar + in-terminal display) ────────────────
 function cmdGithub(args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
     return [{ id: uid(), content: 'github: not available in SSR', type: 'error' }];
   }
-
-  const username = 'Markes10';
-
-  // Show a loading spinner immediately
-  const loadingLines: OutputLine[] = [
+  const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: `  Fetching GitHub data for <span style="color:#ffb000;font-weight:bold">${username}</span>...`, type: 'html' },
+    { id: uid(), content: `  Fetching GitHub data for <span style="color:#ffb000;font-weight:bold">Markes10</span>...`, type: 'html' },
   ];
-
-  // Async fetch – append results via appendOutput
   if (args[0]) {
-    // Specific repo
-    const repo = args[0];
-    fetchGitHubRepo(username, repo, ctx.appendOutput);
+    fetchGitHubRepo(args[0], ctx.appendOutput);
   } else {
-    fetchGitHubProfile(username, ctx.appendOutput);
+    fetchGitHubProfile(ctx.appendOutput);
   }
-
-  return loadingLines;
+  return loading;
 }
 
-interface GitHubUser {
+interface GHUser {
   login: string; name: string | null; bio: string | null;
   public_repos: number; followers: number; following: number;
-  location: string | null; blog: string | null; twitter_username: string | null;
+  location: string | null; blog: string | null;
   created_at: string; avatar_url: string;
 }
-
-interface GitHubRepo {
+interface GHRepo {
   name: string; description: string | null; language: string | null;
   stargazers_count: number; forks_count: number;
   html_url: string; updated_at: string; topics: string[];
 }
 
-async function fetchGitHubProfile(username: string, appendOutput: (lines: OutputLine[]) => void) {
+async function fetchGitHubProfile(appendOutput: (l: OutputLine[]) => void) {
   try {
     const [userRes, reposRes] = await Promise.all([
-      fetch(`https://api.github.com/users/${username}`),
-      fetch(`https://api.github.com/users/${username}/repos?sort=updated&per_page=10`),
+      fetch('https://api.github.com/users/Markes10'),
+      fetch('https://api.github.com/users/Markes10/repos?sort=updated&per_page=10'),
     ]);
-    if (!userRes.ok) throw new Error(`GitHub API returned ${userRes.status}`);
-    const user: GitHubUser = await userRes.json();
-    const repos: GitHubRepo[] = reposRes.ok ? await reposRes.json() : [];
+    if (!userRes.ok) throw new Error(`GitHub API ${userRes.status}`);
+    const user: GHUser = await userRes.json();
+    const repos: GHRepo[] = reposRes.ok ? await reposRes.json() : [];
 
-    const lines: OutputLine[] = [
+    // Convert avatar to colourful ASCII
+    let avatarAscii = '';
+    try {
+      avatarAscii = await convertImageToAscii(user.avatar_url, 36, true);
+    } catch { /* avatar may fail due to CORS – fallback to text */ }
+
+    const html = buildGitHubProfileHTML(user, repos, avatarAscii);
+    appendOutput([
       { id: uid(), content: '', type: 'output' },
-      { id: uid(), content: buildGitHubProfileHTML(user, repos), type: 'html' },
+      { id: uid(), content: html, type: 'html' },
       { id: uid(), content: '', type: 'output' },
-    ];
-    appendOutput(lines);
+    ]);
   } catch (err: any) {
     appendOutput([
       { id: uid(), content: '', type: 'output' },
@@ -224,40 +241,25 @@ async function fetchGitHubProfile(username: string, appendOutput: (lines: Output
   }
 }
 
-async function fetchGitHubRepo(username: string, repo: string, appendOutput: (lines: OutputLine[]) => void) {
+async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => void) {
   try {
-    const res = await fetch(`https://api.github.com/repos/${username}/${repo}`);
+    const res = await fetch(`https://api.github.com/repos/Markes10/${repo}`);
     if (!res.ok) throw new Error(`Repository '${repo}' not found (HTTP ${res.status})`);
-    const repoData: GitHubRepo = await res.json();
-
-    const langColors: Record<string, string> = {
-      Python: '#3572A5', JavaScript: '#f1e05a', TypeScript: '#3178c6',
-      'Jupyter Notebook': '#DA5B0B', HTML: '#e34c26', CSS: '#563d7c',
-      Shell: '#89e051', Dockerfile: '#384d54', Go: '#00ADD8',
-    };
-    const langColor = langColors[repoData.language || ''] || '#8b949e';
-
+    const r: GHRepo = await res.json();
+    const lc = langColor(r.language);
     const html = `
 <div style="margin:6px 0">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-    <img src="${repoData.html_url}/raw/master/demo.png" 
-         onerror="this.style.display='none'"
-         style="width:80px;height:80px;border-radius:8px;border:1px solid #ffb00044;object-fit:cover" />
-    <div>
-      <div style="font-size:16px;font-weight:bold;color:#ffb000">${repoData.name}</div>
-      <div style="font-size:11px;color:#b37d00;margin-top:4px">${repoData.description || 'No description'}</div>
-    </div>
+  <div style="font-size:16px;font-weight:bold;color:#ffb000">${r.name}</div>
+  <div style="font-size:11px;color:#b37d00;margin-top:4px">${r.description || 'No description'}</div>
+  <div style="display:flex;gap:20px;font-size:12px;margin:12px 0;flex-wrap:wrap">
+    <span style="color:#ffb000">&#9733; ${r.stargazers_count}</span>
+    <span style="color:#ffb000">&#128268; ${r.forks_count} forks</span>
+    <span>Lang: <span style="color:${lc};font-weight:bold">${r.language || 'N/A'}</span></span>
+    <span>Updated: ${new Date(r.updated_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
   </div>
-  <div style="display:flex;gap:20px;font-size:12px;margin-bottom:12px;flex-wrap:wrap">
-    <span style="color:#ffb000">&#9733; ${repoData.stargazers_count}</span>
-    <span style="color:#ffb000">&#128268; ${repoData.forks_count} forks</span>
-    <span>Lang: <span style="color:${langColor};font-weight:bold">${repoData.language || 'N/A'}</span></span>
-    <span>Updated: ${new Date(repoData.updated_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-  </div>
-  <div style="font-size:11px;color:#b37d00">${repoData.html_url}</div>
-  ${repoData.topics.length ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${repoData.topics.map(t => `<span style="font-size:10px;background:#ffb00022;color:#ffb000;padding:2px 8px;border-radius:10px;border:1px solid #ffb00044">${t}</span>`).join('')}</div>` : ''}
+  <div style="font-size:11px;color:#b37d00">${r.html_url}</div>
+  ${r.topics.length ? `<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${r.topics.map(t => `<span style="font-size:10px;background:#ffb00022;color:#ffb000;padding:2px 8px;border-radius:10px;border:1px solid #ffb00044">${t}</span>`).join('')}</div>` : ''}
 </div>`;
-
     appendOutput([
       { id: uid(), content: '', type: 'output' },
       { id: uid(), content: html, type: 'html' },
@@ -272,16 +274,19 @@ async function fetchGitHubRepo(username: string, repo: string, appendOutput: (li
   }
 }
 
-function buildGitHubProfileHTML(user: GitHubUser, repos: GitHubRepo[]): string {
-  const langColors: Record<string, string> = {
+function langColor(lang: string | null): string {
+ const m: Record<string, string> = {
     Python: '#3572A5', JavaScript: '#f1e05a', TypeScript: '#3178c6',
     'Jupyter Notebook': '#DA5B0B', HTML: '#e34c26', CSS: '#563d7c',
     Shell: '#89e051', Dockerfile: '#384d54', Go: '#00ADD8',
   };
+  return lang ? (m[lang] || '#8b949e') : '#8b949e';
+}
 
-  const topRepos = repos.slice(0, 8);
-  const reposHTML = topRepos.map(r => {
-    const lc = langColors[r.language || ''] || '#8b949e';
+function buildGitHubProfileHTML(user: GHUser, repos: GHRepo[], avatarAscii: string): string {
+  const top = repos.slice(0, 8);
+  const reposHTML = top.map(r => {
+    const lc = langColor(r.language);
     return `
     <div style="padding:10px 14px;border:1px solid #ffb00022;border-radius:6px;background:#ffb00008">
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -299,9 +304,11 @@ function buildGitHubProfileHTML(user: GitHubUser, repos: GitHubRepo[]): string {
 
   return `
 <div style="margin:6px 0">
-  <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
-    <img src="${user.avatar_url}" style="width:72px;height:72px;border-radius:50%;border:2px solid #ffb000" />
-    <div>
+  <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:16px">
+    ${avatarAscii
+      ? `<div style="flex-shrink:0;line-height:1.05;font-size:6px;letter-spacing:0">${avatarAscii.replace(/\n/g, '<br/>')}</div>`
+      : `<img src="${user.avatar_url}" style="width:72px;height:72px;border-radius:50%;border:2px solid #ffb000" />`}
+    <div style="padding-top:4px">
       <div style="font-size:18px;font-weight:bold;color:#ffb000">${user.name || user.login}</div>
       <div style="font-size:11px;color:#b37d00;margin-top:3px">${user.bio || ''}</div>
       <div style="font-size:11px;color:#707070;margin-top:6px">${user.location || ''} ${user.blog ? '&middot; ' + user.blog : ''}</div>
@@ -320,187 +327,180 @@ function buildGitHubProfileHTML(user: GitHubUser, repos: GitHubRepo[]): string {
 
 // ── Contact ─────────────────────────────────────────────────────────────
 function cmdContact(_args: string[], ctx: CommandContext): OutputLine[] {
-  const contactNode = getNode(ctx.fs, '/contact/contact.txt');
+  const node = getNode(ctx.fs, '/contact/contact.txt');
   const lines: OutputLine[] = [];
-  if (contactNode?.content) {
-    lines.push(...contactNode.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const })));
+  if (node?.content) {
+    lines.push(...node.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const })));
   }
   lines.push({ id: uid(), content: '', type: 'output' });
   lines.push({ id: uid(), content: '  Send an email:', type: 'output' });
-  lines.push({
-    id: uid(),
-    content: '  mailto:dweepangain11dec99@gmail.com',
-    type: 'output',
-  });
+  lines.push({ id: uid(), content: '  mailto:dweepangain11dec99@gmail.com', type: 'output' });
   lines.push({ id: uid(), content: '', type: 'output' });
   return lines;
 }
 
-// ── Resume (colorful HTML with photo) ────────────────────────────────────
-function cmdResume(_args: string[], _ctx: CommandContext): OutputLine[] {
+// ── Resume (async – colorful HTML + ASCII photo + download) ───────────
+function cmdResume(_args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
     return [{ id: uid(), content: 'resume: not available in SSR', type: 'error' }];
   }
-
-  // Also trigger download
-  const textContent = buildResumeText();
-  const blob = new Blob([textContent], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'Dweepan_Gain_Resume.txt';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-
-  return [
-    { id: uid(), content: buildColorfulResumeHTML(), type: 'html' },
+  // Trigger text-file download immediately
+  downloadResumeFile();
+  // Render colorful HTML resume asynchronously (needs ASCII photo)
+  const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: '  Resume file downloaded: Dweepan_Gain_Resume.txt', type: 'output' },
-    { id: uid(), content: '', type: 'output' },
+    { id: uid(), content: '  Rendering colorful resume...', type: 'output' },
   ];
+  buildAsyncResumeHTML().then(html => {
+    ctx.appendOutput([
+      { id: uid(), content: html, type: 'html' },
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: '  Resume file downloaded: Dweepan_Gain_Resume.txt', type: 'output' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  });
+  return loading;
 }
 
-function buildColorfulResumeHTML(): string {
+function downloadResumeFile() {
+  const content = buildResumeText();
+  const blob = new Blob([content], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'Dweepan_Gain_Resume.txt';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+async function buildAsyncResumeHTML(): Promise<string> {
+  let asciiPhoto = '';
+  try {
+    asciiPhoto = await getProfileAscii(50);
+  } catch { /* fallback to empty */ }
+  return buildColorfulResumeHTML(asciiPhoto);
+}
+
+function buildColorfulResumeHTML(asciiPhoto: string): string {
   const C = {
     amber: '#ffb000', dim: '#b37d00', accent: '#ff6600',
-    bg: '#0d0d00', card: '#ffb0000d', border: '#ffb00033',
+    card: '#ffb0000d', border: '#ffb00033',
     blue: '#3498DB', green: '#2ecc71', purple: '#a855f7',
     red: '#e74c3c', cyan: '#00bcd4', white: '#e0e0e0',
   };
 
-  const section = (icon: string, title: string, color: string) =>
-    `<div style="display:flex;align-items:center;gap:8px;margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid ${C.border}">
-      <span style="color:${color};font-size:14px">${icon}</span>
-      <span style="color:${color};font-size:13px;font-weight:bold;letter-spacing:2px">${title}</span>
+  const sec = (icon: string, title: string, color: string) =>
+    `<div style="display:flex;align-items:center;gap:8px;margin:16px 0 8px;padding-bottom:5px;border-bottom:1px solid ${C.border}">
+      <span style="color:${color};font-size:13px">${icon}</span>
+      <span style="color:${color};font-size:12px;font-weight:bold;letter-spacing:2px">${title}</span>
     </div>`;
 
   const bullet = (text: string, sub = false) =>
-    `<div style="font-size:11px;color:${sub ? C.dim : C.white};line-height:1.55;padding-left:${sub ? 20 : 12}px;position:relative;margin:2px 0">
+    `<div style="font-size:10px;color:${sub ? C.dim : C.white};line-height:1.5;padding-left:${sub ? 18 : 10}px;position:relative;margin:1px 0">
       <span style="position:absolute;left:0;color:${C.amber}">${sub ? '&middot;' : '&#9656;'}</span>${text}
     </div>`;
 
-  const expBlock = (title: string, company: string, period: string, color: string, points: string[]) => `
-    <div style="margin-bottom:14px;padding:10px 14px;border-left:3px solid ${color};background:${C.card};border-radius:0 6px 6px 0">
+  const expBlock = (title: string, company: string, period: string, color: string, pts: string[]) => `
+    <div style="margin-bottom:12px;padding:8px 12px;border-left:3px solid ${color};background:${C.card};border-radius:0 6px 6px 0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px">
-        <div>
-          <span style="color:${C.amber};font-weight:bold;font-size:13px">${title}</span>
-          <span style="color:${C.dim};font-size:11px"> @ ${company}</span>
-        </div>
-        <span style="color:${color};font-size:10px;font-weight:bold">${period}</span>
+        <div><span style="color:${C.amber};font-weight:bold;font-size:12px">${title}</span> <span style="color:${C.dim};font-size:10px">@ ${company}</span></div>
+        <span style="color:${color};font-size:9px;font-weight:bold">${period}</span>
       </div>
-      ${points.map(p => bullet(p, true)).join('')}
+      ${pts.map(p => bullet(p, true)).join('')}
+    </div>`;
+
+  const projCard = (n: string, s: string, c: string) =>
+    `<div style="padding:7px 10px;border:1px solid ${c}33;border-radius:5px;background:${c}0d">
+      <div style="color:${c};font-weight:bold;font-size:10px">${n}</div>
+      <div style="color:${C.dim};font-size:9px;margin-top:2px">${s}</div>
     </div>`;
 
   return `
-<div style="max-width:680px;margin:6px auto">
-  <!-- Header -->
-  <div style="display:flex;align-items:center;gap:18px;padding:16px 20px;background:${C.card};border:1px solid ${C.border};border-radius:10px;margin-bottom:4px">
-    <img src="/profile.jpg" style="width:90px;height:90px;border-radius:10px;border:2px solid ${C.amber};object-fit:cover" />
-    <div>
-      <div style="font-size:22px;font-weight:bold;color:${C.amber};letter-spacing:1px">DWEEPAN GAIN</div>
-      <div style="font-size:13px;color:${C.accent};margin:4px 0 8px">AI / ML Engineer</div>
-      <div style="font-size:11px;color:${C.dim};line-height:1.7">
+<div style="max-width:660px;margin:4px auto">
+  <!-- Header with ASCII photo -->
+  <div style="display:flex;align-items:flex-start;gap:16px;padding:14px 18px;background:${C.card};border:1px solid ${C.border};border-radius:10px;margin-bottom:4px">
+    ${asciiPhoto
+      ? `<div style="flex-shrink:0;line-height:1.05;font-size:5px;letter-spacing:0;filter:drop-shadow(0 0 4px rgba(255,176,0,0.2))">${asciiPhoto.replace(/\n/g, '<br/>')}</div>`
+      : ''}
+    <div style="padding-top:2px">
+      <div style="font-size:20px;font-weight:bold;color:${C.amber};letter-spacing:1px">DWEEPAN GAIN</div>
+      <div style="font-size:12px;color:${C.accent};margin:3px 0 6px">AI / ML Engineer</div>
+      <div style="font-size:10px;color:${C.dim};line-height:1.7">
         <span style="color:${C.amber}">&#9679;</span> Vasco Da Gama, Goa, India &nbsp;&nbsp;
         <span style="color:${C.amber}">&#9679;</span> +91 8485841623<br/>
-        <span style="color:${C.amber}">&#9679;</span> dweepangain11dec99@gmail.com &nbsp;&nbsp;
+        <span style="color:${C.amber}">&#9679;</span> dweepangain11dec99@gmail.com<br/>
         <span style="color:${C.amber}">&#9679;</span> github.com/Markes10
       </div>
     </div>
   </div>
 
-  <!-- Summary -->
-  <div style="font-size:11px;color:${C.white};line-height:1.7;padding:8px 0">
+  <div style="font-size:10px;color:${C.white};line-height:1.65;padding:6px 0">
     Results-driven AI/ML Engineer specializing in production-grade intelligent systems.
     Deep expertise in LLMs, NLP, and machine learning with strong full-stack
     development foundation. Building end-to-end solutions bridging research
     and real-world business impact.
   </div>
 
-  ${section('&#128187;', 'EXPERIENCE', C.blue)}
-
+  ${sec('&#128187;', 'EXPERIENCE', C.blue)}
   ${expBlock('AI/ML Engineer', 'Labmentix', 'Jan 2024 - Present', C.blue, [
     'Architected AI-powered CRM + PIM platform for enterprise clients with LLM-based extraction',
     'Built ML pipelines reducing manual data entry by 60% across client operations',
     'Led prompt engineering initiatives improving extraction accuracy to 94%',
     'Designed RESTful APIs handling 10K+ daily requests with sub-200ms response times',
   ])}
-
   ${expBlock('Software Developer', 'Demerg Systems', 'Jun 2023 - Dec 2023', C.green, [
     'Developed full-stack B2B SaaS applications using React, Node.js, and PostgreSQL',
     'Implemented real-time data sync via WebSockets, reducing latency by 40%',
     'Optimized database queries improving API throughput by 3x under high concurrency',
   ])}
-
   ${expBlock('AI/ML Intern', 'JYESTA', 'Jan 2023 - May 2023', C.purple, [
     'Built AI email assistant using OpenAI GPT APIs and Python with NLP classification',
     'Achieved 89% accuracy on email classification models for domain-specific routing',
-    'Created FastAPI REST endpoints for model serving with seamless product integration',
   ])}
-
   ${expBlock('Web Dev Intern', 'Tentwenty Digital', 'Aug 2022 - Dec 2022', C.cyan, [
     'Built responsive React websites with animated UI components using Framer Motion',
-    'Optimized site performance achieving Lighthouse scores above 90 across all projects',
+    'Optimized site performance achieving Lighthouse scores above 90',
   ])}
 
-  ${section('&#128736;', 'PROJECTS', C.accent)}
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    ${[
-      ['AI CRM + PIM', 'Python, FastAPI, React, GPT-4, LangChain', C.blue],
-      ['AI Email Assistant', 'Python, GPT-4, NLP, SpaCy', C.green],
-      ['Resume Analyzer', 'Python, NLP, scikit-learn', C.purple],
-      ['Fraud Detection', 'XGBoost, Random Forest, Flask', C.red],
-      ['Medical Report Analyzer', 'OCR, NLP, FastAPI, React', C.cyan],
-      ['Secure Chat App', 'React, Socket.IO, AES-256', C.amber],
-      ['Social Media Monitor', 'NLP, VADER, Elasticsearch', C.green],
-    ].map(([name, stack, color]) => `
-      <div style="padding:8px 12px;border:1px solid ${color}33;border-radius:6px;background:${color}0d">
-        <div style="color:${color};font-weight:bold;font-size:11px">${name}</div>
-        <div style="color:${C.dim};font-size:10px;margin-top:3px">${stack}</div>
-      </div>`).join('')}
+  ${sec('&#128736;', 'PROJECTS', C.accent)}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+    ${projCard('AI CRM + PIM', 'Python, FastAPI, React, GPT-4, LangChain', C.blue)}
+    ${projCard('AI Email Assistant', 'Python, GPT-4, NLP, SpaCy', C.green)}
+    ${projCard('Resume Analyzer', 'Python, NLP, scikit-learn', C.purple)}
+    ${projCard('Fraud Detection', 'XGBoost, Random Forest, Flask', C.red)}
+    ${projCard('Medical Report Analyzer', 'OCR, NLP, FastAPI, React', C.cyan)}
+    ${projCard('Secure Chat App', 'React, Socket.IO, AES-256', C.amber)}
+    ${projCard('Social Media Monitor', 'NLP, VADER, Elasticsearch', C.green)}
   </div>
 
-  ${section('&#128218;', 'SKILLS', C.green)}
-
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;font-size:11px">
+  ${sec('&#128218;', 'SKILLS', C.green)}
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:10px">
     ${[
       ['Languages', 'Python, JavaScript, TypeScript, SQL, Bash, C++'],
-      ['AI / LLM', 'GPT-4, LangChain, Prompt Engineering, Fine-Tuning, RAG'],
-      ['Machine Learning', 'Scikit-learn, XGBoost, Neural Networks, Feature Engineering'],
-      ['Frontend', 'React, Next.js, Tailwind CSS, Framer Motion, GSAP'],
+      ['AI / LLM', 'GPT-4, LangChain, Prompt Eng, Fine-Tuning, RAG'],
+      ['ML', 'Scikit-learn, XGBoost, Neural Networks, Feature Eng'],
+      ['Frontend', 'React, Next.js, Tailwind CSS, Framer Motion'],
       ['Backend', 'Node.js, Express, FastAPI, Flask, WebSockets'],
-      ['Cloud & DevOps', 'AWS, Docker, CI/CD, Git, GitHub Actions, Nginx'],
+      ['Cloud', 'AWS, Docker, CI/CD, Git, GitHub Actions'],
       ['Databases', 'PostgreSQL, MongoDB, Redis, Elasticsearch'],
       ['Data Science', 'Pandas, NumPy, Matplotlib, EDA, A/B Testing'],
-    ].map(([cat, skills]) => `
-      <div style="margin:3px 0">
-        <span style="color:${C.amber};font-weight:bold">${cat}:</span>
-        <span style="color:${C.white}">${skills}</span>
-      </div>`).join('')}
+    ].map(([cat, sk]) => `<div><span style="color:${C.amber};font-weight:bold">${cat}:</span> <span style="color:${C.white}">${sk}</span></div>`).join('')}
   </div>
 
-  ${section('&#127891;', 'EDUCATION', C.purple)}
-
-  <div style="padding:10px 14px;border-left:3px solid ${C.purple};background:${C.card};border-radius:0 6px 6px 0">
-    <div style="color:${C.amber};font-weight:bold;font-size:13px">B.E. Computer Engineering</div>
-    <div style="color:${C.dim};font-size:11px;margin-top:3px">Goa College of Engineering, Farmagudi, Goa &middot; 2019 - 2023</div>
-    <div style="color:${C.white};font-size:10px;margin-top:6px;line-height:1.6">
-      Relevant: Data Structures & Algorithms, Machine Learning, Deep Learning,
-      Database Management, Operating Systems, Computer Networks, Software Engineering
+  ${sec('&#127891;', 'EDUCATION', C.purple)}
+  <div style="padding:8px 12px;border-left:3px solid ${C.purple};background:${C.card};border-radius:0 6px 6px 0">
+    <div style="color:${C.amber};font-weight:bold;font-size:12px">B.E. Computer Engineering</div>
+    <div style="color:${C.dim};font-size:10px;margin-top:2px">Goa College of Engineering, Farmagudi, Goa &middot; 2019 - 2023</div>
+    <div style="color:${C.white};font-size:9px;margin-top:4px;line-height:1.5">
+      Data Structures & Algorithms, Machine Learning, Deep Learning,
+      Database Management, Operating Systems, Software Engineering
     </div>
   </div>
-
-  <div style="margin-top:14px;padding:10px 14px;border-left:3px solid ${C.cyan};background:${C.card};border-radius:0 6px 6px 0">
-    <div style="color:${C.amber};font-weight:bold;font-size:12px">Certifications</div>
-    ${['Deep Learning Specialization - Coursera (Andrew Ng)', 'AWS Cloud Practitioner - Amazon Web Services', 'NLP Specialization - Coursera'].map(c =>
-      `<div style="color:${C.white};font-size:10px;margin-top:4px;padding-left:12px;position:relative"><span style="position:absolute;left:0;color:${C.cyan}">&#9656;</span>${c}</div>`
-    ).join('')}
+  <div style="margin-top:10px;padding:8px 12px;border-left:3px solid ${C.cyan};background:${C.card};border-radius:0 6px 6px 0">
+    <div style="color:${C.amber};font-weight:bold;font-size:11px">Certifications</div>
+    ${['Deep Learning Specialization - Coursera (Andrew Ng)', 'AWS Cloud Practitioner', 'NLP Specialization - Coursera'].map(c => `<div style="color:${C.white};font-size:9px;margin-top:3px;padding-left:10px;position:relative"><span style="position:absolute;left:0;color:${C.cyan}">&#9656;</span>${c}</div>`).join('')}
     </div>
 
-  <!-- Footer -->
-  <div style="text-align:center;margin-top:20px;padding-top:12px;border-top:1px solid ${C.border};font-size:10px;color:${C.dim}">
+  <div style="text-align:center;margin-top:16px;padding-top:10px;border-top:1px solid ${C.border};font-size:9px;color:${C.dim}">
     Generated by RETROSHELL &middot; github.com/Markes10
   </div>
 </div>`;
@@ -581,9 +581,7 @@ B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
 // ── System commands ──────────────────────────────────────────────────────
 function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
   const validThemes: ThemeName[] = ['amber', 'green', 'white'];
-  if (!args[0]) {
-    return [{ id: uid(), content: `theme: usage: theme <amber|green|white>`, type: 'output' }];
-  }
+  if (!args[0]) return [{ id: uid(), content: 'theme: usage: theme <amber|green|white>', type: 'output' }];
   const t = args[0].toLowerCase() as ThemeName;
   if (!validThemes.includes(t)) {
     return [{ id: uid(), content: `theme: invalid theme '${args[0]}'. Available: amber, green, white`, type: 'error' }];
@@ -611,76 +609,64 @@ function cmdClear(_args: string[], _ctx: CommandContext): OutputLine[] {
 }
 
 function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
-  const lines = [
-    { id: uid(), content: '', type: 'output' as const },
-    { id: uid(), content: '  RETROSHELL -- COMMAND MANUAL', type: 'output' as const },
-    { id: uid(), content: '  ============================', type: 'output' as const },
-    { id: uid(), content: '', type: 'output' as const },
-    { id: uid(), content: '  NAVIGATION', type: 'output' as const },
-    { id: uid(), content: '    ls [path]           List directory contents', type: 'output' as const },
-    { id: uid(), content: '    cd <path>           Change directory', type: 'output' as const },
-    { id: uid(), content: '    cat <file>          Display file contents', type: 'output' as const },
-    { id: uid(), content: '', type: 'output' as const },
-    { id: uid(), content: '  PORTFOLIO', type: 'output' as const },
-    { id: uid(), content: '    whoami              Display profile with photo', type: 'output' as const },
-    { id: uid(), content: '    profile             Display profile photo card', type: 'output' as const },
-    { id: uid(), content: '    experience          Show work history', type: 'output' as const },
-    { id: uid(), content: '    projects            List all projects', type: 'output' as const },
-    { id: uid(), content: '    skills              Show technical skills', type: 'output' as const },
-    { id: uid(), content: '    education           Show education history', type: 'output' as const },
-    { id: uid(), content: '    contact             Show contact information', type: 'output' as const },
-    { id: uid(), content: '    resume              Show colorful resume + download file', type: 'output' as const },
-    { id: uid(), content: '    github [repo]       Show GitHub profile/repos in terminal', type: 'output' as const },
-    { id: uid(), content: '', type: 'output' as const },
-    { id: uid(), content: '  SYSTEM', type: 'output' as const },
-    { id: uid(), content: '    theme <amber|green|white>  Switch terminal color theme', type: 'output' as const },
-    { id: uid(), content: '    crt                 Toggle CRT scanline effect', type: 'output' as const },
-    { id: uid(), content: '    keys                Toggle mechanical key click sound', type: 'output' as const },
-    { id: uid(), content: '    clear               Clear terminal screen', type: 'output' as const },
-    { id: uid(), content: '    help                Show this manual', type: 'output' as const },
-    { id: uid(), content: '', type: 'output' as const },
-    { id: uid(), content: '  SHORTCUTS', type: 'output' as const },
-    { id: uid(), content: '    Tab                 Auto-complete commands and paths', type: 'output' as const },
-    { id: uid(), content: '    Up/Down             Scroll command history', type: 'output' as const },
-    { id: uid(), content: '    Ctrl+L              Clear screen', type: 'output' as const },
-    { id: uid(), content: '    Esc                 Cancel current input', type: 'output' as const },
-    { id: uid(), content: '', type: 'output' as const },
+  const L = (t: string) => ({ id: uid(), content: t, type: 'output' as const });
+  return [
+    L(''), L('  RETROSHELL -- COMMAND MANUAL'), L('  ============================'), L(''),
+    L('  NAVIGATION'),
+    L('    ls [path]           List directory contents'),
+    L('    cd <path>           Change directory'),
+    L('    cat <file>          Display file contents'), L(''),
+    L('  PORTFOLIO'),
+    L('    whoami              Display profile with ASCII portrait'),
+    L('    profile             Display ASCII portrait + info'),
+    L('    experience          Show work history'),
+    L('    projects            List all projects'),
+    L('    skills              Show technical skills'),
+    L('    education           Show education history'),
+    L('    contact             Show contact information'),
+    L('    resume              Show colorful resume + download'),
+    L('    github [repo]       Show GitHub profile/repos in terminal'), L(''),
+    L('  SYSTEM'),
+    L('    theme <amber|green|white>  Switch terminal color theme'),
+    L('    crt                 Toggle CRT scanline effect'),
+    L('    keys                Toggle mechanical key click sound'),
+    L('    clear               Clear terminal screen'),
+    L('    help                Show this manual'), L(''),
+    L('  SHORTCUTS'),
+    L('    Tab                 Auto-complete commands and paths'),
+    L('    Up/Down             Scroll command history'),
+    L('    Ctrl+L              Clear screen'),
+    L('    Esc                 Cancel current input'), L(''),
   ];
-  return lines;
 }
 
 function cmdProjects(_args: string[], ctx: CommandContext): OutputLine[] {
   return cmdLs(['/projects'], { ...ctx, cwd: '/' });
 }
 
-// ── Tab completion ───────────────────────────────────────────────────────
-const ALL_COMMANDS = ['ls', 'cd', 'cat', 'whoami', 'skills', 'experience', 'education', 'github', 'contact', 'resume', 'theme', 'crt', 'keys', 'clear', 'help', 'projects', 'profile'];
+// ── Tab / ghost-text completion ─────────────────────────────────────────
+const ALL_CMDS = ['ls','cd','cat','whoami','skills','experience','education','github','contact','resume','theme','crt','keys','clear','help','projects','profile'];
 
 export function getTabCompletion(input: string, cwd: string, fs: FSNode): string {
   const parts = input.split(/\s+/);
   if (parts.length <= 1) {
-    const prefix = parts[0];
-    const match = ALL_COMMANDS.find(c => c.startsWith(prefix));
-    return match ? match : input;
+    const m = ALL_CMDS.find(c => c.startsWith(parts[0]));
+    return m ? m : input;
   }
-
   const cmd = parts[0];
-  if (!['ls', 'cd', 'cat'].includes(cmd)) return input;
-
+  if (!['ls','cd','cat'].includes(cmd)) return input;
   const pathPartial = parts[parts.length - 1];
   const dirParts = pathPartial.split('/');
   const prefix = dirParts.pop() || '';
   const dirPath = dirParts.join('/');
   const targetDir = dirPath ? resolvePath(cwd, dirPath) : cwd;
   const node = getNode(fs, targetDir);
-
   if (!node || node.type !== 'directory' || !node.children) return input;
-
-  const matches = Object.keys(node.children).filter(name => name.startsWith(prefix));
+  const matches = Object.keys(node.children).filter(n => n.startsWith(prefix));
   if (matches.length === 1) {
-    const completed = matches[0];
-    const suffix = node.children[completed].type === 'directory' ? '/' : '';
-    return parts.slice(0, -1).join(' ') + ' ' + dirPath + (dirPath ? '/' : '') + completed + suffix;
+    const c = matches[0];
+    const sfx = node.children[c].type === 'directory' ? '/' : '';
+    return parts.slice(0, -1).join(' ') + ' ' + dirPath + (dirPath ? '/' : '') + c + sfx;
   }
   return input;
 }
@@ -688,12 +674,11 @@ export function getTabCompletion(input: string, cwd: string, fs: FSNode): string
 export function getGhostText(input: string, cwd: string, fs: FSNode): string {
   const parts = input.split(/\s+/);
   if (parts.length <= 1) {
-    const prefix = parts[0];
-    const match = ALL_COMMANDS.find(c => c.startsWith(prefix));
-    return match ? match.slice(prefix.length) : '';
+    const m = ALL_CMDS.find(c => c.startsWith(parts[0]));
+    return m ? m.slice(parts[0].length) : '';
   }
   const cmd = parts[0];
-  if (!['ls', 'cd', 'cat'].includes(cmd)) return '';
+  if (!['ls','cd','cat'].includes(cmd)) return '';
   const pathPartial = parts[parts.length - 1];
   const dirParts = pathPartial.split('/');
   const prefix = dirParts.pop() || '';
@@ -701,10 +686,10 @@ export function getGhostText(input: string, cwd: string, fs: FSNode): string {
   const targetDir = dirPath ? resolvePath(cwd, dirPath) : cwd;
   const node = getNode(fs, targetDir);
   if (!node || node.type !== 'directory' || !node.children) return '';
-  const matches = Object.keys(node.children).filter(name => name.startsWith(prefix));
+  const matches = Object.keys(node.children).filter(n => n.startsWith(prefix));
   if (matches.length === 1) {
-    const completed = matches[0];
-    return completed.slice(prefix.length) + (node.children[completed].type === 'directory' ? '/' : '');
+    const c = matches[0];
+    return c.slice(prefix.length) + (node.children[c].type === 'directory' ? '/' : '');
   }
   return '';
 }

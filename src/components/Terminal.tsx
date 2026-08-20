@@ -64,7 +64,7 @@ const BANNER = `
  ██████╗██╗      █████╗ ███████╗███████╗██╗███╗   ██╗ ██████╗ 
 ██╔════╝██║     ██╔══██╗██╔════╝██╔════╝██║████╗  ██║██╔═══██╗
 ██║     ██║     ███████║███████╗███████╗██║██╔██╗ ██║██║   ██║
-██║     ██║     ██╔══██║╚════██║╚════██║██║██║╚██╗██║██║   ██║
+██║     ██║     ██╔══██╗╚════██║╚════██║██║██║╚██╗██║██║   ██║
 ╚██████╗███████╗██║  ██║███████║███████║██║██║ ╚████║╚██████╔╝
  ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
 
@@ -74,20 +74,22 @@ const BANNER = `
           type 'help' to read the manual
 `;
 
-// Keyboard click sound using Web Audio API
+// Mechanical key click via Web Audio
 let audioCtx: AudioContext | null = null;
 function playKeySound() {
-  if (!audioCtx) audioCtx = new AudioContext();
-  const osc = audioCtx.createOscillator();
-  const gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.frequency.setValueAtTime(800 + Math.random() * 400, audioCtx.currentTime);
-  osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
-  gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
-  osc.start(audioCtx.currentTime);
-  osc.stop(audioCtx.currentTime + 0.06);
+  try {
+    if (!audioCtx) audioCtx = new AudioContext();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.frequency.setValueAtTime(800 + Math.random() * 400, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+    gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.06);
+  } catch { /* */ }
 }
 
 export default function Terminal() {
@@ -101,17 +103,27 @@ export default function Terminal() {
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [isBooting, setIsBooting] = useState(true);
   const [bootDone, setBootDone] = useState(false);
-
   const [cursorVisible, setCursorVisible] = useState(true);
   const [themeFading, setThemeFading] = useState(false);
 
-  const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
 
+  // We keep refs to the latest state so the global listener always sees current values
+  const stateRef = useRef({ input, output, cwd, history, historyIdx, isBooting, bootDone, keysOn, crtOn });
+
+  // Stable dispatchers for use inside the global keydown listener
+  const stableDispatch = useRef({ setTheme, setCrtOn, setKeysOn, setCwd });
+
+  // Sync refs on every render (safe because this doesn't cause side effects)
+  useEffect(() => {
+    stateRef.current = { input, output, cwd, history, historyIdx, isBooting, bootDone, keysOn, crtOn };
+    stableDispatch.current = { setTheme, setCrtOn, setKeysOn, setCwd };
+  });
+
   const colors = THEMES[theme];
 
-  // Blink cursor
+  // Blink cursor at 1.06s
   useEffect(() => {
     const interval = setInterval(() => setCursorVisible(v => !v), 1060);
     return () => clearInterval(interval);
@@ -122,27 +134,164 @@ export default function Terminal() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [output, isBooting]);
+  }, [output, isBooting, input]);
 
-  // Focus input on click
+  // Focus terminal on click
+  const focusTerminal = useCallback(() => {
+    termRef.current?.focus();
+  }, []);
+
+  // GLOBAL keydown listener - bypasses React's event system entirely
   useEffect(() => {
-    const handler = () => inputRef.current?.focus();
-    termRef.current?.addEventListener('click', handler);
-    return () => termRef.current?.removeEventListener('click', handler);
+    const handler = (e: KeyboardEvent) => {
+      const s = stateRef.current;
+      if (!s.bootDone || s.isBooting) return;
+
+      // Tab
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const completed = getTabCompletion(s.input, s.cwd, fileSystem);
+        if (completed !== s.input) setInput(completed);
+        return;
+      }
+
+      // ArrowUp
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (s.history.length === 0) return;
+        const newIdx = s.historyIdx === -1 ? 0 : Math.min(s.historyIdx + 1, s.history.length - 1);
+        setHistoryIdx(newIdx);
+        setInput(s.history[newIdx]);
+        return;
+      }
+
+      // ArrowDown
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (s.historyIdx === -1) return;
+        if (s.historyIdx === 0) {
+          setHistoryIdx(-1);
+          setInput('');
+        } else {
+          const newIdx = s.historyIdx - 1;
+          setHistoryIdx(newIdx);
+          setInput(s.history[newIdx]);
+        }
+        return;
+      }
+
+      // Ctrl+L
+      if (e.key === 'l' && e.ctrlKey) {
+        e.preventDefault();
+        setOutput([]);
+        return;
+      }
+
+      // Ctrl+C
+      if (e.key === 'c' && e.ctrlKey) {
+        e.preventDefault();
+        const promptStr = `guest@retrosh:${s.cwd}$ `;
+        setOutput(prev => [...prev, { id: `ctrlc-${Date.now()}`, content: `${promptStr}${s.input}^C`, type: 'input' }]);
+        setInput('');
+        setHistoryIdx(-1);
+        return;
+      }
+
+      // Ctrl+U
+      if (e.key === 'u' && e.ctrlKey) {
+        e.preventDefault();
+        setInput('');
+        return;
+      }
+
+      // Enter
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const trimmed = s.input.trim();
+        if (!trimmed) return;
+
+        const promptStr = `guest@retrosh:${s.cwd}$ `;
+        const newOutput: OutputLine[] = [
+          ...s.output,
+          { id: `echo-${Date.now()}`, content: `${promptStr}${trimmed}`, type: 'input' },
+        ];
+
+        const handleTheme = (t: ThemeName) => {
+          setThemeFading(true);
+          setTimeout(() => { stableDispatch.current.setTheme(t); setThemeFading(false); }, 200);
+        };
+
+        const ctx = {
+          args: [], cwd: s.cwd, fs: fileSystem,
+          setCwd: (p: string) => stableDispatch.current.setCwd(p),
+          setTheme: handleTheme,
+          setCrt: (v: boolean) => stableDispatch.current.setCrtOn(v),
+          setKeys: (v: boolean) => stableDispatch.current.setKeysOn(v),
+          crtOn: s.crtOn, keysOn: s.keysOn,
+        } as any;
+
+        const result = executeCommand(trimmed, ctx);
+
+        if (result.length > 0 && (result as unknown as string) === 'CLEAR') {
+          setOutput([]);
+        } else {
+          newOutput.push(...result);
+          setOutput(newOutput);
+        }
+
+        setHistory(prev => [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 100));
+        setHistoryIdx(-1);
+        setInput('');
+        return;
+      }
+
+      // Escape
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setInput('');
+        setHistoryIdx(-1);
+        return;
+      }
+
+      // Printable characters - only when no modifier keys
+      // Use e.key first; fall back to e.code for automation tools that don't set e.key
+      let char = '';
+      if (e.key.length === 1) {
+        char = e.key;
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code && e.code.startsWith('Key')) {
+        char = e.code.slice(3).toLowerCase();
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code && e.code.startsWith('Digit')) {
+        char = e.code.slice(5);
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Space') {
+        char = ' ';
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Minus') {
+        char = '-';
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Period') {
+        char = '.';
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Slash') {
+        char = '/';
+      }
+
+      if (char) {
+        e.preventDefault();
+        setInput(prev => prev + char);
+        if (s.keysOn) playKeySound();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   // Boot sequence
   useEffect(() => {
     const bootOutput: OutputLine[] = [];
-    let timeouts: ReturnType<typeof setTimeout>[] = [];
+    const timeouts: ReturnType<typeof setTimeout>[] = [];
 
     BOOT_LINES.forEach((line) => {
       const t = setTimeout(() => {
-        bootOutput.push({
-          id: `boot-${Date.now()}-${Math.random()}`,
-          content: line.text,
-          type: 'boot',
-        });
+        bootOutput.push({ id: `boot-${Date.now()}-${Math.random()}`, content: line.text, type: 'boot' });
         setOutput([...bootOutput]);
       }, line.delay);
       timeouts.push(t);
@@ -152,11 +301,7 @@ export default function Terminal() {
       const bannerLines = BANNER.split('\n');
       bannerLines.forEach((line, i) => {
         const bt = setTimeout(() => {
-          bootOutput.push({
-            id: `banner-${Date.now()}-${i}`,
-            content: line,
-            type: 'banner',
-          });
+          bootOutput.push({ id: `banner-${Date.now()}-${i}`, content: line, type: 'banner' });
           setOutput([...bootOutput]);
         }, i * 15);
         timeouts.push(bt);
@@ -165,7 +310,7 @@ export default function Terminal() {
       const doneT = setTimeout(() => {
         setIsBooting(false);
         setBootDone(true);
-        inputRef.current?.focus();
+        setTimeout(() => termRef.current?.focus(), 50);
       }, bannerLines.length * 15 + 300);
       timeouts.push(doneT);
     }, 4000);
@@ -174,268 +319,97 @@ export default function Terminal() {
     return () => timeouts.forEach(clearTimeout);
   }, []);
 
-  // Compute ghost text
+  // Ghost text
   const ghostText = useMemo(() => {
     if (!bootDone) return '';
     return getGhostText(input, cwd, fileSystem);
   }, [input, cwd, bootDone]);
-
-  const handleThemeChange = useCallback((newTheme: ThemeName) => {
-    setThemeFading(true);
-    setTimeout(() => {
-      setTheme(newTheme);
-      setThemeFading(false);
-    }, 200);
-  }, []);
-
-  const handleCommand = useCallback((rawInput: string) => {
-    const trimmed = rawInput.trim();
-    if (!trimmed) return;
-
-    // Echo the input
-    const promptStr = `guest@retrosh:${cwd}$ `;
-    const newOutput: OutputLine[] = [
-      ...output,
-      { id: `echo-${Date.now()}`, content: `${promptStr}${trimmed}`, type: 'input' },
-    ];
-
-    // Execute
-    const ctx = {
-      args: [],
-      cwd,
-      fs: fileSystem,
-      setCwd,
-      setTheme: handleThemeChange,
-      setCrt,
-      setKeys,
-      crtOn,
-      keysOn,
-    } as any;
-
-    const result = executeCommand(trimmed, ctx);
-
-    // Handle clear
-    if (result.length > 0 && (result as unknown as string) === 'CLEAR') {
-      setOutput([]);
-    } else {
-      newOutput.push(...result);
-      setOutput(newOutput);
-    }
-
-    setHistory(prev => [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 100));
-    setHistoryIdx(-1);
-    setInput('');
-  }, [output, cwd, handleThemeChange, crtOn, keysOn]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (isBooting) return;
-
-    // Tab completion
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const completed = getTabCompletion(input, cwd, fileSystem);
-      if (completed !== input) {
-        setInput(completed);
-      }
-      return;
-    }
-
-    // Up arrow - history
-    if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      if (history.length === 0) return;
-      const newIdx = historyIdx === -1 ? 0 : Math.min(historyIdx + 1, history.length - 1);
-      setHistoryIdx(newIdx);
-      setInput(history[newIdx]);
-      return;
-    }
-
-    // Down arrow - history
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (historyIdx === -1) return;
-      if (historyIdx === 0) {
-        setHistoryIdx(-1);
-        setInput('');
-      } else {
-        const newIdx = historyIdx - 1;
-        setHistoryIdx(newIdx);
-        setInput(history[newIdx]);
-      }
-      return;
-    }
-
-    // Ctrl+L - clear
-    if (e.key === 'l' && e.ctrlKey) {
-      e.preventDefault();
-      setOutput([]);
-      return;
-    }
-
-    // Esc - cancel
-    if (e.key === 'Escape') {
-      setInput('');
-      return;
-    }
-
-    // Enter - execute
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleCommand(input);
-      return;
-    }
-
-    // Play key sound for printable keys
-    if (keysOn && e.key.length === 1) {
-      playKeySound();
-    }
-  }, [input, isBooting, history, historyIdx, cwd, handleCommand, keysOn]);
 
   const promptStr = `guest@retrosh:${cwd}$ `;
 
   return (
     <div
       ref={termRef}
-      className="relative w-full h-screen overflow-hidden font-mono select-none"
+      tabIndex={0}
+      className="relative w-full h-screen overflow-hidden font-mono select-none outline-none"
       style={{
         backgroundColor: colors.bg,
         color: colors.text,
         transition: 'background-color 0.2s, color 0.2s',
         opacity: themeFading ? 0 : 1,
       }}
+      aria-label="RETROSHELL Terminal - type help for commands"
     >
-      {/* CRT Scanline Overlay */}
+      {/* CRT Scanlines */}
       {crtOn && (
-        <div
-          className="pointer-events-none absolute inset-0 z-30"
-          style={{
-            background: `repeating-linear-gradient(
-              0deg,
-              transparent,
-              transparent 2px,
-              ${colors.scanline} 2px,
-              ${colors.scanline} 4px
-            )`,
-          }}
-        />
+        <div className="pointer-events-none absolute inset-0 z-30" style={{
+          background: `repeating-linear-gradient(0deg, transparent, transparent 2px, ${colors.scanline} 2px, ${colors.scanline} 4px)`,
+        }} />
       )}
 
       {/* CRT Vignette */}
       {crtOn && (
-        <div
-          className="pointer-events-none absolute inset-0 z-20"
-          style={{
-            background: `radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%)`,
-          }}
-        />
+        <div className="pointer-events-none absolute inset-0 z-20" style={{
+          background: 'radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%)',
+        }} />
       )}
 
-      {/* Screen flicker glow */}
+      {/* Screen glow */}
       {crtOn && (
-        <div
-          className="pointer-events-none absolute inset-0 z-10"
-          style={{ backgroundColor: colors.crtGlow }}
-        />
+        <div className="pointer-events-none absolute inset-0 z-10" style={{ backgroundColor: colors.crtGlow }} />
       )}
 
-      {/* Terminal Content */}
-      <div
-        ref={scrollRef}
-        className="relative z-10 h-[calc(100vh-36px)] overflow-y-auto px-4 py-3 text-sm leading-relaxed"
-        style={{
-          scrollbarWidth: 'thin',
-          scrollbarColor: `${colors.textDim} transparent`,
-        }}
-      >
-        {/* Output Lines */}
+      {/* Terminal scrollable area */}
+      <div ref={scrollRef} className="relative z-10 h-[calc(100vh-36px)] overflow-y-auto px-4 py-3 text-sm leading-relaxed" style={{
+        scrollbarWidth: 'thin',
+        scrollbarColor: `${colors.textDim} transparent`,
+      }}>
+        {/* Output */}
         {output.map(line => (
-          <div
-            key={line.id}
-            className="whitespace-pre-wrap break-all"
-            style={{
-              color: line.type === 'error'
-                ? colors.accent
-                : line.type === 'input'
-                  ? colors.textDim
-                  : line.type === 'banner'
-                    ? colors.text
-                    : line.type === 'boot'
-                      ? colors.textDim
-                      : colors.text,
-              fontWeight: line.type === 'banner' ? 'bold' : 'normal',
-              fontSize: line.type === 'banner' ? '11px' : undefined,
-              lineHeight: line.type === 'banner' ? '1.1' : undefined,
-              letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
-            }}
-          >
-            {line.content || '\u00A0'}
-          </div>
+          <div key={line.id} className="whitespace-pre-wrap break-all" style={{
+            color: line.type === 'error' ? colors.accent
+              : line.type === 'input' ? colors.textDim
+              : line.type === 'banner' ? colors.text
+              : line.type === 'boot' ? colors.textDim
+              : colors.text,
+            fontWeight: line.type === 'banner' ? 'bold' : 'normal',
+            fontSize: line.type === 'banner' ? '11px' : undefined,
+            lineHeight: line.type === 'banner' ? '1.1' : undefined,
+            letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
+          }}>{line.content || '\u00A0'}</div>
         ))}
 
-        {/* Input Line */}
+        {/* Input line */}
         {bootDone && (
-          <div className="flex items-center whitespace-pre">
-            <span style={{ color: colors.prompt, fontWeight: 'bold' }}>
-              {promptStr}
-            </span>
-            <div className="relative flex-1">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="absolute inset-0 w-full h-full bg-transparent border-none outline-none font-mono text-sm p-0 m-0 caret-transparent"
-                style={{ color: 'transparent' }}
-                autoFocus
-                spellCheck={false}
-                autoCapitalize="off"
-                autoComplete="off"
-              />
-              <div
-                className="font-mono text-sm whitespace-pre"
-                aria-hidden="true"
-              >
-                <span>{input}</span>
-                {ghostText && (
-                  <span style={{ color: colors.textGhost }}>{ghostText}</span>
-                )}
-                <span
-                  className="inline-block w-[8px] h-[16px] align-text-bottom"
-                  style={{
-                    backgroundColor: cursorVisible ? colors.text : 'transparent',
-                    transition: 'background-color 0.1s',
-                  }}
-                />
-              </div>
-            </div>
+          <div className="flex whitespace-pre">
+            <span style={{ color: colors.prompt, fontWeight: 'bold' }}>{promptStr}</span>
+            <span>{input}</span>
+            {ghostText && <span style={{ color: colors.textGhost }}>{ghostText}</span>}
+            <span className="inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0" style={{
+              backgroundColor: cursorVisible ? colors.text : 'transparent',
+              transition: 'background-color 0.1s',
+            }} />
           </div>
         )}
 
         {/* Boot cursor */}
         {isBooting && (
           <div className="flex items-center">
-            <span
-              className="inline-block w-[8px] h-[16px]"
-              style={{
-                backgroundColor: cursorVisible ? colors.text : 'transparent',
-                animation: 'blink 1.06s step-end infinite',
-              }}
-            />
+            <span className="inline-block w-[8px] h-[16px]" style={{
+              backgroundColor: cursorVisible ? colors.text : 'transparent',
+              animation: 'blink 1.06s step-end infinite',
+            }} />
           </div>
         )}
       </div>
 
-      {/* Status Bar */}
+      {/* Status bar */}
       {bootDone && (
-        <div
-          className="relative z-40 flex items-center justify-between px-4 h-[36px] text-xs font-mono border-t"
-          style={{
-            color: colors.textDim,
-            backgroundColor: `${colors.bg}`,
-            borderColor: `${colors.textDim}33`,
-          }}
-        >
+        <div className="relative z-40 flex items-center justify-between px-4 h-[36px] text-xs font-mono border-t" style={{
+          color: colors.textDim,
+          backgroundColor: colors.bg,
+          borderColor: `${colors.textDim}33`,
+        }}>
           <div className="flex items-center gap-3">
             <span>theme:{theme}</span>
             <span>crt:{crtOn ? 'on' : 'off'}</span>
@@ -443,7 +417,7 @@ export default function Terminal() {
           </div>
           <div className="flex items-center gap-3">
             <span>tab:complete</span>
-            <span>{'↑↓'}:history</span>
+            <span>{'\u2191\u2193'}:history</span>
             <span>ctrl-l:clear</span>
             <span>esc:cancel</span>
           </div>

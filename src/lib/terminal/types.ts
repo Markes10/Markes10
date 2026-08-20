@@ -5,7 +5,7 @@ export interface FSNode {
   children?: Record<string, FSNode>;
 }
 
-export type ThemeName = 'amber' | 'green' | 'white';
+export type ThemeName = string;
 
 export interface ThemeColors {
   text: string;

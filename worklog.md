@@ -91,3 +91,29 @@ Stage Summary:
 - Profile ASCII images are ~40-50% smaller across all contexts (boot profile, whoami, resume, GitHub)
 - All files modified: commands.ts, profileArt.ts, imageToAscii.ts
 
+---
+Task ID: 2
+Agent: Main Agent
+Task: Fix theme system - add theme registry with built-in + custom themes
+
+Work Log:
+- Created /src/lib/terminal/themeRegistry.ts with 10 built-in themes: amber, green, white, cyber, red, purple, matrix, solarized, pink, blue
+- Implemented addTheme() with smart color derivation (users only need text/bg/prompt, rest auto-derived)
+- Implemented removeTheme(), hasTheme(), isBuiltin(), getAllThemeNames(), getBuiltinNames(), getCustomNames(), getThemeColors()
+- Changed ThemeName type from union ("amber"|"green"|"white") to string in types.ts
+- Removed hardcoded THEMES object from Terminal.tsx, replaced with getThemeColors() from registry
+- Rewrote cmdTheme with 5 subcommands: list, set, add, remove, info
+- Quick-switch shortcut: "theme cyber" works same as "theme set cyber"
+- "theme add" accepts: name, hex color, optional bg/prompt/accent params
+- "theme info" shows all 9 color properties of any theme
+- Fuzzy suggestion on typos (e.g. "theme purp" suggests "purple")
+- Updated help text with new theme commands
+- Cleaned up unused imports (ThemeColors from Terminal.tsx, ThemeName from commands.ts)
+- Build passes with zero errors
+
+Stage Summary:
+- 10 built-in themes available out of the box
+- Users can create unlimited custom themes with: theme add <name> <hex> [bg <hex>] [prompt <hex>] [accent <hex>]
+- Built-in themes cannot be overwritten or deleted
+- Files modified: types.ts, Terminal.tsx, commands.ts
+- Files created: themeRegistry.ts

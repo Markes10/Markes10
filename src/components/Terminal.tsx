@@ -1,44 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { OutputLine, ThemeName, ThemeColors } from '@/lib/terminal/types';
+import { OutputLine, ThemeName } from '@/lib/terminal/types';
 import { fileSystem } from '@/lib/terminal/fileSystem';
 import { executeCommand, getTabCompletion, getGhostText } from '@/lib/terminal/commands';
 import { createProfileCardHTML } from '@/lib/terminal/profileArt';
-
-const THEMES: Record<ThemeName, ThemeColors> = {
-  amber: {
-    text: '#ffb000',
-    textDim: '#b37d00',
-    textGhost: 'rgba(255, 176, 0, 0.35)',
-    bg: '#0a0a00',
-    prompt: '#ffb000',
-    accent: '#ff6600',
-    scanline: 'rgba(255, 176, 0, 0.03)',
-    crtGlow: 'rgba(255, 176, 0, 0.04)',
-  },
-  green: {
-    text: '#33ff00',
-    textDim: '#1a8c00',
-    textGhost: 'rgba(51, 255, 0, 0.3)',
-    bg: '#000a00',
-    prompt: '#33ff00',
-    accent: '#00cc66',
-    scanline: 'rgba(51, 255, 0, 0.03)',
-    crtGlow: 'rgba(51, 255, 0, 0.04)',
-  },
-  white: {
-    text: '#c0c0c0',
-    textDim: '#707070',
-    textGhost: 'rgba(192, 192, 192, 0.3)',
-    bg: '#0a0a0a',
-    prompt: '#e0e0e0',
-    accent: '#ffffff',
-    scanline: 'rgba(192, 192, 192, 0.03)',
-    crtGlow: 'rgba(192, 192, 192, 0.04)',
-  },
-};
-
+import { getThemeColors } from '@/lib/terminal/themeRegistry';
 const BOOT_LINES = [
   { text: 'RETRO BIOS v2.4.1', delay: 0 },
   { text: 'Copyright (C) 2024 RetroSystems Inc.', delay: 80 },
@@ -122,7 +89,7 @@ export default function Terminal() {
     stableDispatch.current = { setTheme, setCrtOn, setKeysOn, setCwd };
   });
 
-  const colors = THEMES[theme];
+  const colors = getThemeColors(theme);
 
   // Blink cursor at 1.06s
   useEffect(() => {
@@ -217,7 +184,7 @@ export default function Terminal() {
           { id: `echo-${Date.now()}`, content: `${promptStr}${trimmed}`, type: 'input' },
         ];
 
-        const handleTheme = (t: ThemeName) => {
+        const handleTheme = (t: string) => {
           setThemeFading(true);
           setTimeout(() => { stableDispatch.current.setTheme(t); setThemeFading(false); }, 200);
         };

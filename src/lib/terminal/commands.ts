@@ -1,6 +1,11 @@
-import { CommandContext, FSNode, OutputLine, ThemeName } from './types';
+import { CommandContext, FSNode, OutputLine } from './types';
 import { createProfileCardHTML } from './profileArt';
 import { getProfileAscii, convertImageToAscii } from './imageToAscii';
+import {
+  getAllThemeNames, hasTheme, isBuiltin,
+  getBuiltinNames, getCustomNames,
+  addTheme, removeTheme, getThemeColors,
+} from './themeRegistry';
 
 let idCounter = 0;
 const uid = () => `line-${++idCounter}-${Date.now()}`;
@@ -790,14 +795,138 @@ B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
 
 // ── System commands ──────────────────────────────────────────────────────
 function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
-  const validThemes: ThemeName[] = ['amber', 'green', 'white'];
-  if (!args[0]) return [{ id: uid(), content: 'theme: usage: theme <amber|green|white>', type: 'output' }];
-  const t = args[0].toLowerCase() as ThemeName;
-  if (!validThemes.includes(t)) {
-    return [{ id: uid(), content: `theme: invalid theme '${args[0]}'. Available: amber, green, white`, type: 'error' }];
+  const L = (t: string) => ({ id: uid(), content: t, type: 'output' as const });
+  const E = (t: string) => ({ id: uid(), content: t, type: 'error' as const });
+
+  const sub = args[0]?.toLowerCase();
+
+  // No args → quick-switch shortcut (backward compatible)
+  if (!sub) {
+    return [L(''), L('  theme: manage terminal color themes'), L(''),
+      L('  USAGE'), L('    theme list                Show all available themes'),
+      L('    theme set <name>           Switch to a theme'),
+      L('    theme add <name> <hex> [bg <hex>] [prompt <hex>] [accent <hex>]'),
+      L('                           Create a custom theme'),
+      L('    theme remove <name>        Delete a custom theme'),
+      L('    theme info <name>          Show theme color values'),
+      L(''),
+      L('  QUICK SWITCH'),
+      L('    theme <name>              Shortcut for "theme set <name>"'),
+      L(''),
+      L('  EXAMPLES'),
+      L('    theme set cyber'),
+      L('    theme set purple'),
+      L('    theme add neon #ff00ff bg #0d001a prompt #ff66ff'),
+      L('    theme add ocean #00bcd4 bg #001a1f prompt #4dd0e1 accent #0097a7'),
+      L('    theme remove neon'), L(''),
+    ];
   }
-  ctx.setTheme(t);
-  return [{ id: uid(), content: `theme: switched to ${t}`, type: 'output' }];
+
+  // ── list ──────────────────────────────────────────────────────────
+  if (sub === 'list') {
+    const all = getAllThemeNames();
+    const builtins = getBuiltinNames();
+    const customs = getCustomNames();
+    const lines: OutputLine[] = [
+      L(''), L('  AVAILABLE THEMES'), L('  ─────────────────────────────────────'), L(''),
+    ];
+    for (const name of all) {
+      const builtin = builtins.includes(name);
+      const tag = builtin ? 'built-in' : 'custom';
+      const marker = name === ctx.args[0] ? ' <span style="color:#ffb000">*</span>' : '';
+      lines.push({ id: uid(), content: `    <span style="color:#ffb000;font-weight:bold">${name.padEnd(14)}</span> <span style="color:#707070">[${tag}]</span>${marker}`, type: 'html' });
+    }
+    lines.push(L(''));
+    lines.push(L(`  ${all.length} themes available (${builtins.length} built-in, ${customs.length} custom)`));
+    lines.push(L(''));
+    return lines;
+  }
+
+  // ── info ──────────────────────────────────────────────────────────
+  if (sub === 'info') {
+    const name = args[1]?.toLowerCase();
+    if (!name || !hasTheme(name)) {
+      const suggestion = name ? getAllThemeNames().find(n => n.startsWith(name)) : null;
+      return [E(`theme: "${name || ''}" not found${suggestion ? `. Did you mean "${suggestion}"?` : ''}`)];
+    }
+    const c = getThemeColors(name);
+    const builtin = isBuiltin(name);
+    const H = (t: string) => ({ id: uid(), content: t, type: 'html' as const });
+    return [
+      H(''), H(`  Theme: <span style="color:#ffb000;font-weight:bold">${name.toUpperCase()}</span> [${builtin ? 'built-in' : 'custom'}]`),
+      H('  ─────────────────────────────────────'),
+      H(`    <span style="color:#ffb000">text</span>      ${c.text}`),
+      H(`    <span style="color:#ffb000">textDim</span>   ${c.textDim}`),
+      H(`    <span style="color:#ffb000">textGhost</span> ${c.textGhost}`),
+      H(`    <span style="color:#ffb000">bg</span>        ${c.bg}`),
+      H(`    <span style="color:#ffb000">prompt</span>    ${c.prompt}`),
+      H(`    <span style="color:#ffb000">accent</span>    ${c.accent}`),
+      H(`    <span style="color:#ffb000">scanline</span>  ${c.scanline}`),
+      H(`    <span style="color:#ffb000">crtGlow</span>   ${c.crtGlow}`),
+      H(''),
+    ];
+  }
+
+  // ── add ──────────────────────────────────────────────────────────
+  if (sub === 'add') {
+    const name = args[1];
+    if (!name) return [E('theme add: missing theme name. Usage: theme add <name> <text_color> [bg <hex>] [prompt <hex>] [accent <hex>]')];
+
+    const textHex = args[2];
+    if (!textHex) return [E(`theme add: missing text color. Usage: theme add ${name} <text_color_hex> [bg <hex>] ...` )];
+
+    // Parse optional key=value pairs from remaining args
+    const bgHex = parseOptional(args, 3, 'bg');
+    const promptHex = parseOptional(args, 3, 'prompt');
+    const accentHex = parseOptional(args, 3, 'accent');
+
+    const result = addTheme(name, {
+      text: textHex,
+      bg: bgHex || '#0a0a0a',
+      prompt: promptHex || textHex,
+      accent: accentHex || undefined,
+    });
+
+    if (!result.ok) return [E(`theme add: ${result.error}`)];
+
+    return [
+      L(''),
+      { id: uid(), content: `  Theme <span style="color:#ffb000;font-weight:bold">${name.toLowerCase()}</span> created successfully!`, type: 'html' },
+      L(`  Switch to it with:  theme set ${name.toLowerCase()}`),
+      L(''),
+    ];
+  }
+
+  // ── remove ───────────────────────────────────────────────────────
+  if (sub === 'remove' || sub === 'delete' || sub === 'rm') {
+    const name = args[1];
+    if (!name) return [E('theme remove: missing theme name. Usage: theme remove <name>')];
+    const result = removeTheme(name);
+    if (!result.ok) return [E(`theme remove: ${result.error}`)];
+    return [L(`  Theme "${name.toLowerCase()}" removed.`)];
+  }
+
+  // ── set (or quick-switch shortcut) ───────────────────────────────
+  const targetName = sub === 'set' ? args[1]?.toLowerCase() : sub;
+  if (!targetName) return [E('theme set: missing theme name. Use "theme list" to see available themes.')];
+
+  if (!hasTheme(targetName)) {
+    const suggestion = getAllThemeNames().find(n => n.startsWith(targetName));
+    return [E(`theme: "${targetName}" not found.${suggestion ? ` Did you mean "${suggestion}"?` : ''} Use "theme list" to see available themes.`)];
+  }
+
+  ctx.setTheme(targetName);
+  return [
+    { id: uid(), content: `  theme: switched to <span style="color:#ffb000;font-weight:bold">${targetName}</span>`, type: 'html' },
+  ];
+}
+
+/** Parse optional key=value pairs from args array starting at index `from` */
+function parseOptional(args: string[], from: number, key: string): string | undefined {
+  for (let i = from; i < args.length - 1; i++) {
+    if (args[i].toLowerCase() === key) return args[i + 1];
+  }
+  return undefined;
 }
 
 function cmdCrt(_args: string[], ctx: CommandContext): OutputLine[] {
@@ -837,7 +966,11 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     L('    resume              Show colorful resume + download'),
     L('    github [repo]       Show GitHub profile / repo README in terminal'), L(''),
     L('  SYSTEM'),
-    L('    theme <amber|green|white>  Switch terminal color theme'),
+    L('    theme [name]         Quick-switch theme'),
+    L('    theme list           List all available themes'),
+    L('    theme add <n> <hex>  Create custom theme'),
+    L('    theme remove <name>  Delete a custom theme'),
+    L('    theme info <name>    Show theme color values'), L(''),
     L('    crt                 Toggle CRT scanline effect'),
     L('    keys                Toggle mechanical key click sound'),
     L('    clear               Clear terminal screen'),

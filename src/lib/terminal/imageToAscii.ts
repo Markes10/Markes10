@@ -18,8 +18,9 @@ export async function getProfileAscii(
   targetWidth: number = 40,
 ): Promise<string> {
   if (profileCache[targetWidth]) return profileCache[targetWidth];
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   profileCache[targetWidth] = await convertImageToAscii(
-    '/profile.jpg',
+    `${basePath}/profile.jpg`,
     targetWidth,
   );
   return profileCache[targetWidth];

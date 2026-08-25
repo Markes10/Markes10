@@ -1,31 +1,10 @@
-## Hi there 👋
 
-<!-- Light mode image -->
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/Markes10/Markes10/main/light_mode.svg">
-  <!-- Dark mode image -->
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/Markes10/Markes10/main/dark_mode.svg">
-  <img alt="Profile banner" src="https://raw.githubusercontent.com/Markes10/Markes10/main/light_mode.svg">
-</picture>
 
 ## Interactive CLI Portfolio
 
 Open the [GuestOS terminal portfolio](https://markes10.github.io/Markes10/) or run it locally with `npm install` and `npm run dev`.
 
-<!--
-**Markes10/Markes10** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
-Here are some ideas to get you started:
-
-- 🔭 I'm currently working on ...
-- 🌱 I'm currently learning ...
-- 👯 I'm looking to collaborate on ...
-- 🤔 I'm looking for help with ...
-- 💬 Ask me about ...
-- 📫 How to reach me: ...
-- 😄 Pronouns: ...
-- ⚡ Fun fact: ...
--->
 ##PROFILE 
 </p>
 <h3 align="left">Languages and Tools:</h3>

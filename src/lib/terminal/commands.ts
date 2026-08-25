@@ -2,13 +2,20 @@ import { CommandContext, FSNode, OutputLine } from './types';
 import { createProfileCardHTML } from './profileArt';
 import { getProfileAscii, convertImageToAscii } from './imageToAscii';
 import {
-  getAllThemeNames, hasTheme, isBuiltin,
-  getBuiltinNames, getCustomNames,
-  addTheme, removeTheme, getThemeColors,
+  getAllThemeNames,
+  hasTheme,
+  isBuiltin,
+  getBuiltinNames,
+  getCustomNames,
+  addTheme,
+  removeTheme,
+  getThemeColors,
 } from './themeRegistry';
 
 let idCounter = 0;
 const uid = () => `line-${++idCounter}-${Date.now()}`;
+const GITHUB_USERNAME =
+  process.env.NEXT_PUBLIC_GITHUB_USERNAME?.trim() || 'Markes10';
 
 function resolvePath(cwd: string, target: string): string {
   if (target.startsWith('/')) return normalizePath(target);
@@ -42,9 +49,48 @@ function getNode(fs: FSNode, path: string): FSNode | null {
   return current;
 }
 
+export function collectLanguageBreakdown(
+  repoLanguageSets: Array<Record<string, number>>,
+): Array<[string, number]> {
+  const totals = new Map<string, number>();
+
+  for (const repoLanguageSet of repoLanguageSets) {
+    for (const [language, bytes] of Object.entries(repoLanguageSet)) {
+      totals.set(language, (totals.get(language) ?? 0) + bytes);
+    }
+  }
+
+  return [...totals.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
+}
+
+export function getResumeSkillCategories(): Array<[string, string]> {
+  const text = buildResumeText();
+  const match = text.match(
+    /SKILLS\s*----------------------------------------\n([\s\S]*?)\n\s*----------------------------------------\nEDUCATION/,
+  );
+
+  if (!match) return [];
+
+  return match[1]
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const idx = line.indexOf(':');
+      if (idx === -1) return null;
+      const key = line.slice(0, idx).trim();
+      const value = line.slice(idx + 1).trim();
+      if (!key || !value) return null;
+      return [key, value] as [string, string];
+    })
+    .filter((entry): entry is [string, string] => entry !== null);
+}
+
 export function executeCommand(
   rawInput: string,
-  ctx: CommandContext
+  ctx: CommandContext,
 ): OutputLine[] {
   const trimmed = rawInput.trim();
   if (!trimmed) return [];
@@ -53,7 +99,10 @@ export function executeCommand(
   const cmd = parts[0].toLowerCase();
   const args = parts.slice(1);
 
-  const commands: Record<string, (args: string[], ctx: CommandContext) => OutputLine[]> = {
+  const commands: Record<
+    string,
+    (args: string[], ctx: CommandContext) => OutputLine[]
+  > = {
     ls: cmdLs,
     cd: cmdCd,
     cat: cmdCat,
@@ -71,20 +120,41 @@ export function executeCommand(
     help: cmdHelp,
     projects: cmdProjects,
     profile: cmdProfile,
+    date: cmdDate,
+    echo: cmdEcho,
+    uptime: cmdUptime,
+    neofetch: cmdNeofetch,
+    history: cmdHistory,
+    pwd: cmdPwd,
   };
 
   const handler = commands[cmd];
   if (handler) return handler(args, ctx);
 
-  return [{ id: uid(), content: `retrosh: command not found: ${cmd}. Type 'help' for available commands.`, type: 'error' }];
+  return [
+    {
+      id: uid(),
+      content: `retrosh: command not found: ${cmd}. Type 'help' for available commands.`,
+      type: 'error',
+    },
+  ];
 }
 
 function cmdLs(args: string[], ctx: CommandContext): OutputLine[] {
   const target = args[0] ? resolvePath(ctx.cwd, args[0]) : ctx.cwd;
   const node = getNode(ctx.fs, target);
-  if (!node) return [{ id: uid(), content: `ls: cannot access '${args[0] || target}': No such file or directory`, type: 'error' }];
-  if (node.type === 'file') return [{ id: uid(), content: node.name, type: 'output' }];
-  if (!node.children) return [{ id: uid(), content: '(empty directory)', type: 'output' }];
+  if (!node)
+    return [
+      {
+        id: uid(),
+        content: `ls: cannot access '${args[0] || target}': No such file or directory`,
+        type: 'error',
+      },
+    ];
+  if (node.type === 'file')
+    return [{ id: uid(), content: node.name, type: 'output' }];
+  if (!node.children)
+    return [{ id: uid(), content: '(empty directory)', type: 'output' }];
   const entries = Object.keys(node.children).sort((a, b) => {
     const aDir = node.children![a].type === 'directory' ? 0 : 1;
     const bDir = node.children![b].type === 'directory' ? 0 : 1;
@@ -94,7 +164,11 @@ function cmdLs(args: string[], ctx: CommandContext): OutputLine[] {
   return entries.map(name => {
     const child = node.children![name];
     const suffix = child.type === 'directory' ? '/' : '';
-    return { id: uid(), content: `  ${name}${suffix}`, type: 'output' as const };
+    return {
+      id: uid(),
+      content: `  ${name}${suffix}`,
+      type: 'output' as const,
+    };
   });
 }
 
@@ -102,31 +176,56 @@ function cmdCd(args: string[], ctx: CommandContext): OutputLine[] {
   const target = args[0] || '/';
   const resolved = resolvePath(ctx.cwd, target);
   const node = getNode(ctx.fs, resolved);
-  if (!node) return [{ id: uid(), content: `cd: no such file or directory: ${target}`, type: 'error' }];
-  if (node.type === 'file') return [{ id: uid(), content: `cd: not a directory: ${target}`, type: 'error' }];
+  if (!node)
+    return [
+      {
+        id: uid(),
+        content: `cd: no such file or directory: ${target}`,
+        type: 'error',
+      },
+    ];
+  if (node.type === 'file')
+    return [
+      { id: uid(), content: `cd: not a directory: ${target}`, type: 'error' },
+    ];
   ctx.setCwd(resolved || '/');
   return [];
 }
 
 function cmdCat(args: string[], ctx: CommandContext): OutputLine[] {
-  if (!args[0]) return [{ id: uid(), content: 'cat: missing file operand', type: 'error' }];
+  if (!args[0])
+    return [{ id: uid(), content: 'cat: missing file operand', type: 'error' }];
   const resolved = resolvePath(ctx.cwd, args[0]);
   const node = getNode(ctx.fs, resolved);
-  if (!node) return [{ id: uid(), content: `cat: ${args[0]}: No such file or directory`, type: 'error' }];
-  if (node.type === 'directory') return [{ id: uid(), content: `cat: ${args[0]}: Is a directory`, type: 'error' }];
-  return node.content!.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
+  if (!node)
+    return [
+      {
+        id: uid(),
+        content: `cat: ${args[0]}: No such file or directory`,
+        type: 'error',
+      },
+    ];
+  if (node.type === 'directory')
+    return [
+      { id: uid(), content: `cat: ${args[0]}: Is a directory`, type: 'error' },
+    ];
+  return node
+    .content!.split('\n')
+    .map(line => ({ id: uid(), content: line, type: 'output' as const }));
 }
 
 // ── Profile & Whoami (async – ASCII photo) ───────────────────────────
 function cmdProfile(_args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
-    return [{ id: uid(), content: 'profile: not available in SSR', type: 'error' }];
+    return [
+      { id: uid(), content: 'profile: not available in SSR', type: 'error' },
+    ];
   }
   const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
     { id: uid(), content: '  Rendering profile portrait...', type: 'output' },
   ];
-  createProfileCardHTML().then(html => {
+  createProfileCardHTML(ctx.theme).then(html => {
     ctx.appendOutput([
       { id: uid(), content: html, type: 'html' },
       { id: uid(), content: '', type: 'output' },
@@ -135,9 +234,79 @@ function cmdProfile(_args: string[], ctx: CommandContext): OutputLine[] {
   return loading;
 }
 
+function cmdDate(_args: string[]): OutputLine[] {
+  return [{ id: uid(), content: new Date().toString(), type: 'output' }];
+}
+
+function cmdEcho(args: string[]): OutputLine[] {
+  return [{ id: uid(), content: args.join(' ') || '', type: 'output' }];
+}
+
+function cmdUptime(): OutputLine[] {
+  const now = Date.now();
+  const start =
+    typeof window !== 'undefined' && (window as any).__SESSION_START
+      ? (window as any).__SESSION_START
+      : now;
+  const diff = now - start;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const uptimeStr =
+    hours > 0
+      ? `${hours}h ${minutes % 60}m ${seconds % 60}s`
+      : minutes > 0
+        ? `${minutes}m ${seconds % 60}s`
+        : `${seconds}s`;
+  return [{ id: uid(), content: `  up ${uptimeStr}`, type: 'output' }];
+}
+
+function cmdNeofetch(): OutputLine[] {
+  const lines = [
+    '',
+    '         .---.          Guest@Dweepan',
+    '        /     \\         -----------------',
+    '       /       \\        OS: GuestOS v2.4.1',
+    '      /  .---.  \\       Host: Portfolio Terminal',
+    '     /  /     \\  \\      Kernel: Next.js 16',
+    '    /  /       \\  \\     Shell: retrosh',
+    '   /  /         \\  \\   Uptime: see `uptime`',
+    '  /  /           \\  \\  Theme: customizable',
+    ' /  /             \\  \\ Terminal: Web-based',
+    '/__/               \\__\\',
+    '',
+  ];
+  return lines.map(line => ({
+    id: uid(),
+    content: line,
+    type: 'output' as const,
+  }));
+}
+
+let cmdHistoryStore: string[] = [];
+export function setCommandHistory(history: string[]) {
+  cmdHistoryStore = history;
+}
+function cmdHistory(): OutputLine[] {
+  if (cmdHistoryStore.length === 0) {
+    return [{ id: uid(), content: '  No commands in history', type: 'output' }];
+  }
+  return cmdHistoryStore.map((cmd, i) => ({
+    id: uid(),
+    content: `  ${i + 1}  ${cmd}`,
+    type: 'output' as const,
+  }));
+}
+
+function cmdPwd(_args: string[], ctx: CommandContext): OutputLine[] {
+  return [{ id: uid(), content: ctx.cwd, type: 'output' }];
+}
+
 function cmdWhoami(_args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
-    return [{ id: uid(), content: 'whoami: not available in SSR', type: 'error' }];
+    return [
+      { id: uid(), content: 'whoami: not available in SSR', type: 'error' },
+    ];
   }
   const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
@@ -147,7 +316,11 @@ function cmdWhoami(_args: string[], ctx: CommandContext): OutputLine[] {
     ctx.appendOutput([
       { id: uid(), content: html, type: 'html' },
       { id: uid(), content: '', type: 'output' },
-      { id: uid(), content: '  Building intelligent systems at the intersection of', type: 'output' },
+      {
+        id: uid(),
+        content: '  Building intelligent systems at the intersection of',
+        type: 'output',
+      },
       { id: uid(), content: '  AI and software engineering.', type: 'output' },
       { id: uid(), content: '', type: 'output' },
     ]);
@@ -156,22 +329,125 @@ function cmdWhoami(_args: string[], ctx: CommandContext): OutputLine[] {
 }
 
 function cmdSkills(_args: string[], ctx: CommandContext): OutputLine[] {
-  const node = getNode(ctx.fs, '/skills/skills.txt');
-  if (node?.content) {
-    return node.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
+  const loading: OutputLine[] = [
+    { id: uid(), content: '', type: 'output' },
+    {
+      id: uid(),
+      content: '  Fetching repository languages from GitHub...',
+      type: 'output',
+    },
+  ];
+
+  fetchGitHubLanguages(ctx.appendOutput, ctx.theme);
+  return loading;
+}
+
+async function fetchGitHubLanguages(
+  appendOutput: (lines: OutputLine[]) => void,
+  themeName: string,
+) {
+  try {
+    const reposRes = await fetch(
+      `https://api.github.com/users/${encodeURIComponent(GITHUB_USERNAME)}/repos?sort=updated&per_page=100`,
+    );
+    if (!reposRes.ok) throw new Error(`GitHub API ${reposRes.status}`);
+    const repos: GHRepo[] = await reposRes.json();
+
+    const repoLanguageSets: Record<string, number>[] = [];
+    for (const repo of repos) {
+      const langRes = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(GITHUB_USERNAME)}/${encodeURIComponent(repo.name)}/languages`,
+      );
+      if (langRes.ok) {
+        repoLanguageSets.push((await langRes.json()) as Record<string, number>);
+      }
+    }
+
+    const languages = collectLanguageBreakdown(repoLanguageSets);
+    if (languages.length === 0) {
+      appendOutput([
+        { id: uid(), content: '', type: 'output' },
+        { id: uid(), content: '  No repository languages found.', type: 'output' },
+        { id: uid(), content: '', type: 'output' },
+      ]);
+      return;
+    }
+
+    const theme = getThemeColors(themeName);
+    const totalBytes = languages.reduce((sum, [, bytes]) => sum + bytes, 0);
+    const resumeSkills = getResumeSkillCategories();
+    const resumeSkillsHtml = resumeSkills.length
+      ? `
+        <div class="skills-resume-section">
+          <div class="skills-heading" style="color:${theme.text};">RESUME SKILLS</div>
+          <div class="skills-resume-grid">
+            ${resumeSkills
+              .map(
+                ([cat, skillText]) =>
+                  `<div class="skills-resume-item" style="color:${theme.text};"><span style="color:${theme.accent};">${cat}:</span> ${skillText}</div>`,
+              )
+              .join('')}
+          </div>
+        </div>`
+      : '';
+
+    const skillsHtml = `
+<div class="skills-shell">
+  <div class="skills-panel" style="--skills-text:${theme.text};--skills-accent:${theme.accent};--skills-bg:${theme.bg}CC;--skills-ghost:${theme.textGhost};--skills-border:${theme.text}66;">
+    <div class="skills-section">
+      <div class="skills-heading">LANGUAGES</div>
+      <div class="skills-language-list">
+        ${languages
+          .map(([lang, bytes]) => {
+            const percent = ((bytes / totalBytes) * 100).toFixed(1);
+            return `<span class="skills-language-pill">${lang} ${percent}%</span>`;
+          })
+          .join('')}
+      </div>
+    </div>
+    ${resumeSkillsHtml}
+  </div>
+</div>`;
+
+    appendOutput([
+      { id: uid(), content: '', type: 'output' },
+      { id: uid(), content: skillsHtml, type: 'html' },
+      { id: uid(), content: '', type: 'output' },
+    ]);
+  } catch (err: any) {
+    appendOutput([
+      { id: uid(), content: '', type: 'output' },
+      {
+        id: uid(),
+        content: `  skills: error - ${err.message}`,
+        type: 'error',
+      },
+      { id: uid(), content: '', type: 'output' },
+    ]);
   }
-  return [{ id: uid(), content: 'skills: data not found', type: 'error' }];
 }
 
 function cmdExperience(_args: string[], ctx: CommandContext): OutputLine[] {
   const expNode = getNode(ctx.fs, '/experience');
-  if (!expNode?.children) return [{ id: uid(), content: 'experience: data not found', type: 'error' }];
+  if (!expNode?.children)
+    return [
+      { id: uid(), content: 'experience: data not found', type: 'error' },
+    ];
   const lines: OutputLine[] = [{ id: uid(), content: '', type: 'output' }];
-  const order = ['labmentix.txt', 'demerg-systems.txt', 'jyesta.txt', 'tentwenty-digital.txt'];
+  const order = [
+    'labmentix.txt',
+    'demerg-systems.txt',
+    'jyesta.txt',
+    'tentwenty-digital.txt',
+  ];
   for (const name of order) {
     const file = expNode.children[name];
     if (file?.content) {
-      lines.push(...file.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const })));
+      lines.push(
+        ...file.content
+          .split('\n')
+          .map(line => ({ id: uid(), content: line, type: 'output' as const })),
+      );
       lines.push({ id: uid(), content: '', type: 'output' });
     }
   }
@@ -181,7 +457,9 @@ function cmdExperience(_args: string[], ctx: CommandContext): OutputLine[] {
 function cmdEducation(_args: string[], ctx: CommandContext): OutputLine[] {
   const node = getNode(ctx.fs, '/education/education.txt');
   if (node?.content) {
-    return node.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const }));
+    return node.content
+      .split('\n')
+      .map(line => ({ id: uid(), content: line, type: 'output' as const }));
   }
   return [{ id: uid(), content: 'education: data not found', type: 'error' }];
 }
@@ -189,11 +467,17 @@ function cmdEducation(_args: string[], ctx: CommandContext): OutputLine[] {
 // ── GitHub (async – ASCII avatar + in-terminal display) ────────────────
 function cmdGithub(args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
-    return [{ id: uid(), content: 'github: not available in SSR', type: 'error' }];
+    return [
+      { id: uid(), content: 'github: not available in SSR', type: 'error' },
+    ];
   }
   const loading: OutputLine[] = [
     { id: uid(), content: '', type: 'output' },
-    { id: uid(), content: `  Fetching GitHub data for <span style="color:#ffb000;font-weight:bold">Markes10</span>...`, type: 'html' },
+    {
+      id: uid(),
+      content: `  Fetching GitHub data for <span style="color:#ffb000;font-weight:bold">${GITHUB_USERNAME}</span>...`,
+      type: 'html',
+    },
   ];
   if (args[0]) {
     fetchGitHubRepo(args[0], ctx.appendOutput);
@@ -204,22 +488,37 @@ function cmdGithub(args: string[], ctx: CommandContext): OutputLine[] {
 }
 
 interface GHUser {
-  login: string; name: string | null; bio: string | null;
-  public_repos: number; followers: number; following: number;
-  location: string | null; blog: string | null;
-  created_at: string; avatar_url: string;
+  login: string;
+  name: string | null;
+  bio: string | null;
+  public_repos: number;
+  followers: number;
+  following: number;
+  location: string | null;
+  blog: string | null;
+  created_at: string;
+  avatar_url: string;
 }
 interface GHRepo {
-  name: string; description: string | null; language: string | null;
-  stargazers_count: number; forks_count: number;
-  html_url: string; updated_at: string; topics: string[];
+  name: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  forks_count: number;
+  html_url: string;
+  updated_at: string;
+  topics: string[];
 }
 
 async function fetchGitHubProfile(appendOutput: (l: OutputLine[]) => void) {
   try {
     const [userRes, reposRes] = await Promise.all([
-      fetch('https://api.github.com/users/Markes10'),
-      fetch('https://api.github.com/users/Markes10/repos?sort=updated&per_page=10'),
+      fetch(
+        `https://api.github.com/users/${encodeURIComponent(GITHUB_USERNAME)}`,
+      ),
+      fetch(
+        `https://api.github.com/users/${encodeURIComponent(GITHUB_USERNAME)}/repos?sort=updated&per_page=10`,
+      ),
     ]);
     if (!userRes.ok) throw new Error(`GitHub API ${userRes.status}`);
     const user: GHUser = await userRes.json();
@@ -229,9 +528,22 @@ async function fetchGitHubProfile(appendOutput: (l: OutputLine[]) => void) {
     let avatarAscii = '';
     try {
       avatarAscii = await convertImageToAscii(user.avatar_url, 22, true);
-    } catch { /* avatar may fail due to CORS – fallback to text */ }
+    } catch {
+      /* avatar may fail due to CORS – fallback to text */
+    }
 
-    const html = buildGitHubProfileHTML(user, repos, avatarAscii);
+    let profileReadme: string | null = null;
+    try {
+      profileReadme = await fetchGitHubReadme(GITHUB_USERNAME);
+    } catch {
+      // Profile metadata and repositories remain available if README access fails.
+    }
+    const html = buildGitHubProfileHTML(
+      user,
+      repos,
+      avatarAscii,
+      profileReadme,
+    );
     appendOutput([
       { id: uid(), content: '', type: 'output' },
       { id: uid(), content: html, type: 'html' },
@@ -246,10 +558,25 @@ async function fetchGitHubProfile(appendOutput: (l: OutputLine[]) => void) {
   }
 }
 
-async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => void) {
+async function fetchGitHubReadme(username: string): Promise<string | null> {
+  const readmeRes = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(username)}/${encodeURIComponent(username)}/readme`,
+    { headers: { Accept: 'application/vnd.github.raw+json' } },
+  );
+  if (!readmeRes.ok) return null;
+  return readmeRes.text();
+}
+
+async function fetchGitHubRepo(
+  repo: string,
+  appendOutput: (l: OutputLine[]) => void,
+) {
   try {
-    const res = await fetch(`https://api.github.com/repos/Markes10/${repo}`);
-    if (!res.ok) throw new Error(`Repository '${repo}' not found (HTTP ${res.status})`);
+    const res = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(GITHUB_USERNAME)}/${encodeURIComponent(repo)}`,
+    );
+    if (!res.ok)
+      throw new Error(`Repository '${repo}' not found (HTTP ${res.status})`);
     const r: GHRepo = await res.json();
     const lc = langColor(r.language);
 
@@ -277,12 +604,21 @@ async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => 
     // Fetch README.md content
     try {
       // Try README.md first, then common variants
-      const readmeVariants = ['README.md', 'Readme.md', 'readme.md', 'README.rst', 'README.txt', 'README'];
+      const readmeVariants = [
+        'README.md',
+        'Readme.md',
+        'readme.md',
+        'README.rst',
+        'README.txt',
+        'README',
+      ];
       let readmeContent: string | null = null;
       let readmeName = '';
 
       for (const name of readmeVariants) {
-        const readMeRes = await fetch(`https://api.github.com/repos/Markes10/${repo}/contents/${name}`);
+        const readMeRes = await fetch(
+          `https://api.github.com/repos/${encodeURIComponent(GITHUB_USERNAME)}/${encodeURIComponent(repo)}/contents/${name}`,
+        );
         if (readMeRes.ok) {
           const fileData = await readMeRes.json();
           if (fileData.content && fileData.encoding === 'base64') {
@@ -303,13 +639,21 @@ async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => 
         ]);
       } else {
         appendOutput([
-          { id: uid(), content: '  No README.md found in this repository.', type: 'output' },
+          {
+            id: uid(),
+            content: '  No README.md found in this repository.',
+            type: 'output',
+          },
           { id: uid(), content: '', type: 'output' },
         ]);
       }
     } catch (readmeErr: any) {
       appendOutput([
-        { id: uid(), content: `  README fetch failed: ${readmeErr.message}`, type: 'error' },
+        {
+          id: uid(),
+          content: `  README fetch failed: ${readmeErr.message}`,
+          type: 'error',
+        },
         { id: uid(), content: '', type: 'output' },
       ]);
     }
@@ -325,9 +669,15 @@ async function fetchGitHubRepo(repo: string, appendOutput: (l: OutputLine[]) => 
 /** Convert raw README markdown to terminal-friendly HTML */
 function buildReadmeHTML(filename: string, raw: string): string {
   const C = {
-    amber: '#ffb000', dim: '#b37d00', accent: '#ff6600',
-    border: '#ffb00033', white: '#e0e0e0', bg: '#ffb0000d',
-    link: '#3498DB', code: '#2ecc71', codeBg: '#ffb00015',
+    amber: '#ffb000',
+    dim: '#b37d00',
+    accent: '#ff6600',
+    border: '#ffb00033',
+    white: '#e0e0e0',
+    bg: '#ffb0000d',
+    link: '#3498DB',
+    code: '#2ecc71',
+    codeBg: '#ffb00015',
   };
 
   // Strip HTML tags from raw content (GitHub API may return rendered HTML in some cases)
@@ -351,7 +701,9 @@ function buildReadmeHTML(filename: string, raw: string): string {
         inCodeBlock = false;
       } else {
         const lang = line.trim().slice(3).trim();
-        htmlParts.push(`<div style="margin:6px 0;padding:8px 12px;border-left:3px solid ${C.code};background:${C.codeBg};border-radius:0 5px 5px 0;font-size:11px;line-height:1.5">${lang ? `<div style="color:${C.code};font-size:9px;font-weight:bold;margin-bottom:6px;letter-spacing:1px">${lang.toUpperCase()}</div>` : ''}`);
+        htmlParts.push(
+          `<div style="margin:6px 0;padding:8px 12px;border-left:3px solid ${C.code};background:${C.codeBg};border-radius:0 5px 5px 0;font-size:11px;line-height:1.5">${lang ? `<div style="color:${C.code};font-size:9px;font-weight:bold;margin-bottom:6px;letter-spacing:1px">${lang.toUpperCase()}</div>` : ''}`,
+        );
         inCodeBlock = true;
       }
       continue;
@@ -359,7 +711,10 @@ function buildReadmeHTML(filename: string, raw: string): string {
 
     if (inCodeBlock) {
       // Escape HTML entities in code blocks
-      const escaped = line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const escaped = line
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
       htmlParts.push(escaped + '<br/>');
       continue;
     }
@@ -367,7 +722,9 @@ function buildReadmeHTML(filename: string, raw: string): string {
     // Table detection
     if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
       if (!inTable) {
-        htmlParts.push(`<div style="margin:6px 0;border:1px solid ${C.border};border-radius:5px;overflow:hidden">`);
+        htmlParts.push(
+          `<div style="margin:6px 0;border:1px solid ${C.border};border-radius:5px;overflow:hidden">`,
+        );
         inTable = true;
         tableIsFirstRow = true;
       }
@@ -377,9 +734,15 @@ function buildReadmeHTML(filename: string, raw: string): string {
         continue;
       }
 
-      const cells = line.trim().slice(1, -1).split('|').map(c => c.trim());
+      const cells = line
+        .trim()
+        .slice(1, -1)
+        .split('|')
+        .map(c => c.trim());
       const cellStyle = `padding:4px 10px;font-size:10px;border-bottom:1px solid ${C.border};${tableIsFirstRow ? `background:${C.bg};font-weight:bold;color:${C.amber}` : `color:${C.white}`}`;
-      htmlParts.push(`<div style="display:flex">${cells.map(c => `<div style="${cellStyle};flex:1">${inlineFormat(c)}</div>`).join('')}</div>`);
+      htmlParts.push(
+        `<div style="display:flex">${cells.map(c => `<div style="${cellStyle};flex:1">${inlineFormat(c)}</div>`).join('')}</div>`,
+      );
       tableIsFirstRow = false;
       continue;
     }
@@ -408,25 +771,35 @@ function buildReadmeHTML(filename: string, raw: string): string {
     const h4Match = line.match(/^####\s+(.+)/);
 
     if (h1Match) {
-      htmlParts.push(`<div style="font-size:16px;font-weight:bold;color:${C.amber};margin:14px 0 8px;padding-bottom:6px;border-bottom:2px solid ${C.amber}">${inlineFormat(h1Match[1])}</div>`);
+      htmlParts.push(
+        `<div style="font-size:16px;font-weight:bold;color:${C.amber};margin:14px 0 8px;padding-bottom:6px;border-bottom:2px solid ${C.amber}">${inlineFormat(h1Match[1])}</div>`,
+      );
       continue;
     }
     if (h2Match) {
-      htmlParts.push(`<div style="font-size:14px;font-weight:bold;color:${C.amber};margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid ${C.border}">${inlineFormat(h2Match[1])}</div>`);
+      htmlParts.push(
+        `<div style="font-size:14px;font-weight:bold;color:${C.amber};margin:12px 0 6px;padding-bottom:4px;border-bottom:1px solid ${C.border}">${inlineFormat(h2Match[1])}</div>`,
+      );
       continue;
     }
     if (h3Match) {
-      htmlParts.push(`<div style="font-size:12px;font-weight:bold;color:${C.accent};margin:10px 0 4px">&#9656; ${inlineFormat(h3Match[1])}</div>`);
+      htmlParts.push(
+        `<div style="font-size:12px;font-weight:bold;color:${C.accent};margin:10px 0 4px">&#9656; ${inlineFormat(h3Match[1])}</div>`,
+      );
       continue;
     }
     if (h4Match) {
-      htmlParts.push(`<div style="font-size:11px;font-weight:bold;color:${C.dim};margin:8px 0 3px">  ${inlineFormat(h4Match[1])}</div>`);
+      htmlParts.push(
+        `<div style="font-size:11px;font-weight:bold;color:${C.dim};margin:8px 0 3px">  ${inlineFormat(h4Match[1])}</div>`,
+      );
       continue;
     }
 
     // Horizontal rule
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
-      htmlParts.push(`<div style="border:none;border-top:1px solid ${C.border};margin:10px 0"></div>`);
+      htmlParts.push(
+        `<div style="border:none;border-top:1px solid ${C.border};margin:10px 0"></div>`,
+      );
       continue;
     }
 
@@ -437,26 +810,34 @@ function buildReadmeHTML(filename: string, raw: string): string {
         htmlParts.push(`<div style="padding-left:12px;margin:2px 0">`);
         inList = true;
       }
-      htmlParts.push(`<div style="font-size:11px;color:${C.white};line-height:1.6;padding:1px 0"><span style="color:${C.amber};font-weight:bold">&#9656;</span> ${inlineFormat(listMatch[2])}</div>`);
+      htmlParts.push(
+        `<div style="font-size:11px;color:${C.white};line-height:1.6;padding:1px 0"><span style="color:${C.amber};font-weight:bold">&#9656;</span> ${inlineFormat(listMatch[2])}</div>`,
+      );
       continue;
     }
 
     // Blockquote
     const quoteMatch = line.trim().match(/^>\s*(.*)/);
     if (quoteMatch) {
-      htmlParts.push(`<div style="border-left:3px solid ${C.amber};padding:4px 12px;margin:4px 0;font-size:11px;color:${C.dim};font-style:italic;background:${C.bg}">${inlineFormat(quoteMatch[1])}</div>`);
+      htmlParts.push(
+        `<div style="border-left:3px solid ${C.amber};padding:4px 12px;margin:4px 0;font-size:11px;color:${C.dim};font-style:italic;background:${C.bg}">${inlineFormat(quoteMatch[1])}</div>`,
+      );
       continue;
     }
 
     // Image (show alt text as link since we can't render images)
     const imgMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)/);
     if (imgMatch) {
-      htmlParts.push(`<div style="font-size:11px;color:${C.link};margin:4px 0">[image: ${inlineFormat(imgMatch[1])}] ${imgMatch[2]}</div>`);
+      htmlParts.push(
+        `<div style="font-size:11px;color:${C.link};margin:4px 0">[image: ${inlineFormat(imgMatch[1])}] ${imgMatch[2]}</div>`,
+      );
       continue;
     }
 
     // Regular paragraph line
-    htmlParts.push(`<div style="font-size:11px;color:${C.white};line-height:1.65;margin:2px 0">${inlineFormat(line)}</div>`);
+    htmlParts.push(
+      `<div style="font-size:11px;color:${C.white};line-height:1.65;margin:2px 0">${inlineFormat(line)}</div>`,
+    );
   }
 
   // Close any open containers
@@ -477,32 +858,53 @@ function buildReadmeHTML(filename: string, raw: string): string {
 /** Inline markdown formatting: bold, italic, code, links */
 function inlineFormat(text: string): string {
   // Escape HTML
-  let s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let s = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   // Inline code
-  s = s.replace(/`([^`]+)`/g, '<code style="background:#ffb00018;color:#2ecc71;padding:1px 5px;border-radius:3px;font-size:10px">$1</code>');
+  s = s.replace(
+    /`([^`]+)`/g,
+    '<code style="background:#ffb00018;color:#2ecc71;padding:1px 5px;border-radius:3px;font-size:10px">$1</code>',
+  );
   // Bold
   s = s.replace(/\*\*([^*]+)\*\*/g, '<b style="color:#ffb000">$1</b>');
   // Italic
   s = s.replace(/\*([^*]+)\*/g, '<i style="color:#e0e0e0">$1</i>');
   // Links
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a style="color:#3498DB;text-decoration:underline" href="$2" target="_blank" rel="noopener">$1</a>');
+  s = s.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a style="color:#3498DB;text-decoration:underline" href="$2" target="_blank" rel="noopener">$1</a>',
+  );
   return s;
 }
 
 function langColor(lang: string | null): string {
- const m: Record<string, string> = {
-    Python: '#3572A5', JavaScript: '#f1e05a', TypeScript: '#3178c6',
-    'Jupyter Notebook': '#DA5B0B', HTML: '#e34c26', CSS: '#563d7c',
-    Shell: '#89e051', Dockerfile: '#384d54', Go: '#00ADD8',
+  const m: Record<string, string> = {
+    Python: '#3572A5',
+    JavaScript: '#f1e05a',
+    TypeScript: '#3178c6',
+    'Jupyter Notebook': '#DA5B0B',
+    HTML: '#e34c26',
+    CSS: '#563d7c',
+    Shell: '#89e051',
+    Dockerfile: '#384d54',
+    Go: '#00ADD8',
   };
-  return lang ? (m[lang] || '#8b949e') : '#8b949e';
+  return lang ? m[lang] || '#8b949e' : '#8b949e';
 }
 
-function buildGitHubProfileHTML(user: GHUser, repos: GHRepo[], avatarAscii: string): string {
+function buildGitHubProfileHTML(
+  user: GHUser,
+  repos: GHRepo[],
+  avatarAscii: string,
+  profileReadme: string | null,
+): string {
   const top = repos.slice(0, 8);
-  const reposHTML = top.map(r => {
-    const lc = langColor(r.language);
-    return `
+  const reposHTML = top
+    .map(r => {
+      const lc = langColor(r.language);
+      return `
     <div style="padding:10px 14px;border:1px solid #ffb00022;border-radius:6px;background:#ffb00008">
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="color:#ffb000;font-weight:bold;font-size:13px">${r.name}</span>
@@ -515,14 +917,17 @@ function buildGitHubProfileHTML(user: GHUser, repos: GHRepo[], avatarAscii: stri
         <span style="color:#707070">${new Date(r.updated_at).toLocaleDateString('en-IN', { year: 'numeric', month: 'short' })}</span>
       </div>
     </div>`;
-  }).join('');
+    })
+    .join('');
 
   return `
 <div style="margin:6px 0">
   <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:16px">
-    ${avatarAscii
-      ? `<div style="flex-shrink:0;line-height:1.05;font-size:5px;letter-spacing:0">${avatarAscii.replace(/\n/g, '<br/>')}</div>`
-      : `<img src="${user.avatar_url}" style="width:72px;height:72px;border-radius:50%;border:2px solid #ffb000" />`}
+    ${
+      avatarAscii
+        ? `<div style="flex-shrink:0;line-height:1.05;font-size:5px;letter-spacing:0">${avatarAscii.replace(/\n/g, '<br/>')}</div>`
+        : `<img src="${user.avatar_url}" style="width:72px;height:72px;border-radius:50%;border:2px solid #ffb000" />`
+    }
     <div style="padding-top:4px">
       <div style="font-size:18px;font-weight:bold;color:#ffb000">${user.name || user.login}</div>
       <div style="font-size:11px;color:#b37d00;margin-top:3px">${user.bio || ''}</div>
@@ -535,7 +940,8 @@ function buildGitHubProfileHTML(user: GHUser, repos: GHRepo[], avatarAscii: stri
     <div><span style="color:#ffb000;font-weight:bold;font-size:20px">${user.following}</span><br/><span style="color:#707070;font-size:10px">FOLLOWING</span></div>
     <div><span style="color:#ffb000;font-weight:bold;font-size:20px">${new Date(user.created_at).getFullYear()}</span><br/><span style="color:#707070;font-size:10px">JOINED</span></div>
   </div>
-  <div style="color:#ffb000;font-size:12px;font-weight:bold;margin-bottom:10px;letter-spacing:1px">&#9656; TOP REPOSITORIES</div>
+  ${profileReadme ? buildReadmeHTML(`${user.login}/README.md`, profileReadme) : ''}
+  <div style="color:#ffb000;font-size:12px;font-weight:bold;margin:16px 0 10px;letter-spacing:1px">&#9656; TOP REPOSITORIES</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${reposHTML}</div>
 </div>`;
 }
@@ -545,11 +951,19 @@ function cmdContact(_args: string[], ctx: CommandContext): OutputLine[] {
   const node = getNode(ctx.fs, '/contact/contact.txt');
   const lines: OutputLine[] = [];
   if (node?.content) {
-    lines.push(...node.content.split('\n').map(line => ({ id: uid(), content: line, type: 'output' as const })));
+    lines.push(
+      ...node.content
+        .split('\n')
+        .map(line => ({ id: uid(), content: line, type: 'output' as const })),
+    );
   }
   lines.push({ id: uid(), content: '', type: 'output' });
   lines.push({ id: uid(), content: '  Send an email:', type: 'output' });
-  lines.push({ id: uid(), content: '  mailto:dweepangain11dec99@gmail.com', type: 'output' });
+  lines.push({
+    id: uid(),
+    content: '  mailto:dweepangain11dec99@gmail.com',
+    type: 'output',
+  });
   lines.push({ id: uid(), content: '', type: 'output' });
   return lines;
 }
@@ -557,7 +971,9 @@ function cmdContact(_args: string[], ctx: CommandContext): OutputLine[] {
 // ── Resume (async – colorful HTML + ASCII photo + download) ───────────
 function cmdResume(_args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
-    return [{ id: uid(), content: 'resume: not available in SSR', type: 'error' }];
+    return [
+      { id: uid(), content: 'resume: not available in SSR', type: 'error' },
+    ];
   }
   // Trigger text-file download immediately
   downloadResumeFile();
@@ -570,7 +986,11 @@ function cmdResume(_args: string[], ctx: CommandContext): OutputLine[] {
     ctx.appendOutput([
       { id: uid(), content: html, type: 'html' },
       { id: uid(), content: '', type: 'output' },
-      { id: uid(), content: '  Resume file downloaded: Dweepan_Gain_Resume.txt', type: 'output' },
+      {
+        id: uid(),
+        content: '  Resume file downloaded: Dweepan_Gain_Resume.txt',
+        type: 'output',
+      },
       { id: uid(), content: '', type: 'output' },
     ]);
   });
@@ -582,25 +1002,37 @@ function downloadResumeFile() {
   const blob = new Blob([content], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'Dweepan_Gain_Resume.txt';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
+  a.href = url;
+  a.download = 'Dweepan_Gain_Resume.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 async function buildAsyncResumeHTML(): Promise<string> {
   let asciiPhoto = '';
   try {
     asciiPhoto = await getProfileAscii(28);
-  } catch { /* fallback to empty */ }
+  } catch {
+    /* fallback to empty */
+  }
   return buildColorfulResumeHTML(asciiPhoto);
 }
 
 function buildColorfulResumeHTML(asciiPhoto: string): string {
   const C = {
-    amber: '#ffb000', dim: '#b37d00', accent: '#ff6600',
-    card: '#ffb0000d', border: '#ffb00033',
-    blue: '#3498DB', green: '#2ecc71', purple: '#a855f7',
-    red: '#e74c3c', cyan: '#00bcd4', white: '#e0e0e0',
+    amber: '#ffb000',
+    dim: '#b37d00',
+    accent: '#ff6600',
+    card: '#ffb0000d',
+    border: '#ffb00033',
+    blue: '#3498DB',
+    green: '#2ecc71',
+    purple: '#a855f7',
+    red: '#e74c3c',
+    cyan: '#00bcd4',
+    white: '#e0e0e0',
   };
 
   const sec = (icon: string, title: string, color: string) =>
@@ -614,7 +1046,13 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
       <span style="position:absolute;left:0;color:${C.amber}">${sub ? '&middot;' : '&#9656;'}</span>${text}
     </div>`;
 
-  const expBlock = (title: string, company: string, period: string, color: string, pts: string[]) => `
+  const expBlock = (
+    title: string,
+    company: string,
+    period: string,
+    color: string,
+    pts: string[],
+  ) => `
     <div style="margin-bottom:12px;padding:8px 12px;border-left:3px solid ${color};background:${C.card};border-radius:0 6px 6px 0">
       <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px">
         <div><span style="color:${C.amber};font-weight:bold;font-size:12px">${title}</span> <span style="color:${C.dim};font-size:10px">@ ${company}</span></div>
@@ -633,9 +1071,11 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
 <div style="max-width:660px;margin:4px auto">
   <!-- Header with ASCII photo -->
   <div style="display:flex;align-items:flex-start;gap:16px;padding:14px 18px;background:${C.card};border:1px solid ${C.border};border-radius:10px;margin-bottom:4px">
-    ${asciiPhoto
-      ? `<div style="flex-shrink:0;line-height:1.05;font-size:5px;letter-spacing:0;filter:drop-shadow(0 0 4px rgba(255,176,0,0.2))">${asciiPhoto.replace(/\n/g, '<br/>')}</div>`
-      : ''}
+    ${
+      asciiPhoto
+        ? `<div style="flex-shrink:0;line-height:1.05;font-size:5px;letter-spacing:0;filter:drop-shadow(0 0 4px rgba(255,176,0,0.2))">${asciiPhoto.replace(/\n/g, '<br/>')}</div>`
+        : ''
+    }
     <div style="padding-top:2px">
       <div style="font-size:20px;font-weight:bold;color:${C.amber};letter-spacing:1px">DWEEPAN GAIN</div>
       <div style="font-size:12px;color:${C.accent};margin:3px 0 6px">AI / ML Engineer</div>
@@ -662,19 +1102,31 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
     'Led prompt engineering initiatives improving extraction accuracy to 94%',
     'Designed RESTful APIs handling 10K+ daily requests with sub-200ms response times',
   ])}
-  ${expBlock('Software Developer', 'Demerg Systems', 'Jun 2023 - Dec 2023', C.green, [
-    'Developed full-stack B2B SaaS applications using React, Node.js, and PostgreSQL',
-    'Implemented real-time data sync via WebSockets, reducing latency by 40%',
-    'Optimized database queries improving API throughput by 3x under high concurrency',
-  ])}
+  ${expBlock(
+    'Software Developer',
+    'Demerg Systems',
+    'Jun 2023 - Dec 2023',
+    C.green,
+    [
+      'Developed full-stack B2B SaaS applications using React, Node.js, and PostgreSQL',
+      'Implemented real-time data sync via WebSockets, reducing latency by 40%',
+      'Optimized database queries improving API throughput by 3x under high concurrency',
+    ],
+  )}
   ${expBlock('AI/ML Intern', 'JYESTA', 'Jan 2023 - May 2023', C.purple, [
     'Built AI email assistant using OpenAI GPT APIs and Python with NLP classification',
     'Achieved 89% accuracy on email classification models for domain-specific routing',
   ])}
-  ${expBlock('Web Dev Intern', 'Tentwenty Digital', 'Aug 2022 - Dec 2022', C.cyan, [
-    'Built responsive React websites with animated UI components using Framer Motion',
-    'Optimized site performance achieving Lighthouse scores above 90',
-  ])}
+  ${expBlock(
+    'Web Dev Intern',
+    'Tentwenty Digital',
+    'Aug 2022 - Dec 2022',
+    C.cyan,
+    [
+      'Built responsive React websites with animated UI components using Framer Motion',
+      'Optimized site performance achieving Lighthouse scores above 90',
+    ],
+  )}
 
   ${sec('&#128736;', 'PROJECTS', C.accent)}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
@@ -698,7 +1150,12 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
       ['Cloud', 'AWS, Docker, CI/CD, Git, GitHub Actions'],
       ['Databases', 'PostgreSQL, MongoDB, Redis, Elasticsearch'],
       ['Data Science', 'Pandas, NumPy, Matplotlib, EDA, A/B Testing'],
-    ].map(([cat, sk]) => `<div><span style="color:${C.amber};font-weight:bold">${cat}:</span> <span style="color:${C.white}">${sk}</span></div>`).join('')}
+    ]
+      .map(
+        ([cat, sk]) =>
+          `<div><span style="color:${C.amber};font-weight:bold">${cat}:</span> <span style="color:${C.white}">${sk}</span></div>`,
+      )
+      .join('')}
   </div>
 
   ${sec('&#127891;', 'EDUCATION', C.purple)}
@@ -802,8 +1259,12 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
 
   // No args → quick-switch shortcut (backward compatible)
   if (!sub) {
-    return [L(''), L('  theme: manage terminal color themes'), L(''),
-      L('  USAGE'), L('    theme list                Show all available themes'),
+    return [
+      L(''),
+      L('  theme: manage terminal color themes'),
+      L(''),
+      L('  USAGE'),
+      L('    theme list                Show all available themes'),
       L('    theme set <name>           Switch to a theme'),
       L('    theme add <name> <hex> [bg <hex>] [prompt <hex>] [accent <hex>]'),
       L('                           Create a custom theme'),
@@ -818,7 +1279,8 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
       L('    theme set purple'),
       L('    theme add neon #ff00ff bg #0d001a prompt #ff66ff'),
       L('    theme add ocean #00bcd4 bg #001a1f prompt #4dd0e1 accent #0097a7'),
-      L('    theme remove neon'), L(''),
+      L('    theme remove neon'),
+      L(''),
     ];
   }
 
@@ -828,16 +1290,28 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
     const builtins = getBuiltinNames();
     const customs = getCustomNames();
     const lines: OutputLine[] = [
-      L(''), L('  AVAILABLE THEMES'), L('  ─────────────────────────────────────'), L(''),
+      L(''),
+      L('  AVAILABLE THEMES'),
+      L('  ─────────────────────────────────────'),
+      L(''),
     ];
     for (const name of all) {
       const builtin = builtins.includes(name);
       const tag = builtin ? 'built-in' : 'custom';
-      const marker = name === ctx.args[0] ? ' <span style="color:#ffb000">*</span>' : '';
-      lines.push({ id: uid(), content: `    <span style="color:#ffb000;font-weight:bold">${name.padEnd(14)}</span> <span style="color:#707070">[${tag}]</span>${marker}`, type: 'html' });
+      const marker =
+        name === ctx.args[0] ? ' <span style="color:#ffb000">*</span>' : '';
+      lines.push({
+        id: uid(),
+        content: `    <span style="color:#ffb000;font-weight:bold">${name.padEnd(14)}</span> <span style="color:#707070">[${tag}]</span>${marker}`,
+        type: 'html',
+      });
     }
     lines.push(L(''));
-    lines.push(L(`  ${all.length} themes available (${builtins.length} built-in, ${customs.length} custom)`));
+    lines.push(
+      L(
+        `  ${all.length} themes available (${builtins.length} built-in, ${customs.length} custom)`,
+      ),
+    );
     lines.push(L(''));
     return lines;
   }
@@ -846,14 +1320,23 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
   if (sub === 'info') {
     const name = args[1]?.toLowerCase();
     if (!name || !hasTheme(name)) {
-      const suggestion = name ? getAllThemeNames().find(n => n.startsWith(name)) : null;
-      return [E(`theme: "${name || ''}" not found${suggestion ? `. Did you mean "${suggestion}"?` : ''}`)];
+      const suggestion = name
+        ? getAllThemeNames().find(n => n.startsWith(name))
+        : null;
+      return [
+        E(
+          `theme: "${name || ''}" not found${suggestion ? `. Did you mean "${suggestion}"?` : ''}`,
+        ),
+      ];
     }
     const c = getThemeColors(name);
     const builtin = isBuiltin(name);
     const H = (t: string) => ({ id: uid(), content: t, type: 'html' as const });
     return [
-      H(''), H(`  Theme: <span style="color:#ffb000;font-weight:bold">${name.toUpperCase()}</span> [${builtin ? 'built-in' : 'custom'}]`),
+      H(''),
+      H(
+        `  Theme: <span style="color:#ffb000;font-weight:bold">${name.toUpperCase()}</span> [${builtin ? 'built-in' : 'custom'}]`,
+      ),
       H('  ─────────────────────────────────────'),
       H(`    <span style="color:#ffb000">text</span>      ${c.text}`),
       H(`    <span style="color:#ffb000">textDim</span>   ${c.textDim}`),
@@ -870,10 +1353,20 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
   // ── add ──────────────────────────────────────────────────────────
   if (sub === 'add') {
     const name = args[1];
-    if (!name) return [E('theme add: missing theme name. Usage: theme add <name> <text_color> [bg <hex>] [prompt <hex>] [accent <hex>]')];
+    if (!name)
+      return [
+        E(
+          'theme add: missing theme name. Usage: theme add <name> <text_color> [bg <hex>] [prompt <hex>] [accent <hex>]',
+        ),
+      ];
 
     const textHex = args[2];
-    if (!textHex) return [E(`theme add: missing text color. Usage: theme add ${name} <text_color_hex> [bg <hex>] ...` )];
+    if (!textHex)
+      return [
+        E(
+          `theme add: missing text color. Usage: theme add ${name} <text_color_hex> [bg <hex>] ...`,
+        ),
+      ];
 
     // Parse optional key=value pairs from remaining args
     const bgHex = parseOptional(args, 3, 'bg');
@@ -891,7 +1384,11 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
 
     return [
       L(''),
-      { id: uid(), content: `  Theme <span style="color:#ffb000;font-weight:bold">${name.toLowerCase()}</span> created successfully!`, type: 'html' },
+      {
+        id: uid(),
+        content: `  Theme <span style="color:#ffb000;font-weight:bold">${name.toLowerCase()}</span> created successfully!`,
+        type: 'html',
+      },
       L(`  Switch to it with:  theme set ${name.toLowerCase()}`),
       L(''),
     ];
@@ -900,7 +1397,10 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
   // ── remove ───────────────────────────────────────────────────────
   if (sub === 'remove' || sub === 'delete' || sub === 'rm') {
     const name = args[1];
-    if (!name) return [E('theme remove: missing theme name. Usage: theme remove <name>')];
+    if (!name)
+      return [
+        E('theme remove: missing theme name. Usage: theme remove <name>'),
+      ];
     const result = removeTheme(name);
     if (!result.ok) return [E(`theme remove: ${result.error}`)];
     return [L(`  Theme "${name.toLowerCase()}" removed.`)];
@@ -908,21 +1408,38 @@ function cmdTheme(args: string[], ctx: CommandContext): OutputLine[] {
 
   // ── set (or quick-switch shortcut) ───────────────────────────────
   const targetName = sub === 'set' ? args[1]?.toLowerCase() : sub;
-  if (!targetName) return [E('theme set: missing theme name. Use "theme list" to see available themes.')];
+  if (!targetName)
+    return [
+      E(
+        'theme set: missing theme name. Use "theme list" to see available themes.',
+      ),
+    ];
 
   if (!hasTheme(targetName)) {
     const suggestion = getAllThemeNames().find(n => n.startsWith(targetName));
-    return [E(`theme: "${targetName}" not found.${suggestion ? ` Did you mean "${suggestion}"?` : ''} Use "theme list" to see available themes.`)];
+    return [
+      E(
+        `theme: "${targetName}" not found.${suggestion ? ` Did you mean "${suggestion}"?` : ''} Use "theme list" to see available themes.`,
+      ),
+    ];
   }
 
   ctx.setTheme(targetName);
   return [
-    { id: uid(), content: `  theme: switched to <span style="color:#ffb000;font-weight:bold">${targetName}</span>`, type: 'html' },
+    {
+      id: uid(),
+      content: `  theme: switched to <span style="color:#ffb000;font-weight:bold">${targetName}</span>`,
+      type: 'html',
+    },
   ];
 }
 
 /** Parse optional key=value pairs from args array starting at index `from` */
-function parseOptional(args: string[], from: number, key: string): string | undefined {
+function parseOptional(
+  args: string[],
+  from: number,
+  key: string,
+): string | undefined {
   for (let i = from; i < args.length - 1; i++) {
     if (args[i].toLowerCase() === key) return args[i + 1];
   }
@@ -933,14 +1450,26 @@ function cmdCrt(_args: string[], ctx: CommandContext): OutputLine[] {
   const current = (ctx as unknown as { crtOn: boolean }).crtOn ?? true;
   const newVal = !current;
   ctx.setCrt(newVal);
-  return [{ id: uid(), content: `crt: ${newVal ? 'enabled' : 'disabled'}`, type: 'output' }];
+  return [
+    {
+      id: uid(),
+      content: `crt: ${newVal ? 'enabled' : 'disabled'}`,
+      type: 'output',
+    },
+  ];
 }
 
 function cmdKeys(_args: string[], ctx: CommandContext): OutputLine[] {
   const current = (ctx as unknown as { keysOn: boolean }).keysOn ?? false;
   const newVal = !current;
   ctx.setKeys(newVal);
-  return [{ id: uid(), content: `keys: ${newVal ? 'on (mechanical click)' : 'silent'}`, type: 'output' }];
+  return [
+    {
+      id: uid(),
+      content: `keys: ${newVal ? 'on (mechanical click)' : 'silent'}`,
+      type: 'output',
+    },
+  ];
 }
 
 function cmdClear(_args: string[], _ctx: CommandContext): OutputLine[] {
@@ -950,11 +1479,15 @@ function cmdClear(_args: string[], _ctx: CommandContext): OutputLine[] {
 function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
   const L = (t: string) => ({ id: uid(), content: t, type: 'output' as const });
   return [
-    L(''), L('  RETROSHELL -- COMMAND MANUAL'), L('  ============================'), L(''),
+    L(''),
+    L('  RETROSHELL -- COMMAND MANUAL'),
+    L('  ============================'),
+    L(''),
     L('  NAVIGATION'),
     L('    ls [path]           List directory contents'),
     L('    cd <path>           Change directory'),
-    L('    cat <file>          Display file contents'), L(''),
+    L('    cat <file>          Display file contents'),
+    L(''),
     L('  PORTFOLIO'),
     L('    whoami              Display profile with ASCII portrait'),
     L('    profile             Display ASCII portrait + info'),
@@ -964,22 +1497,26 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     L('    education           Show education history'),
     L('    contact             Show contact information'),
     L('    resume              Show colorful resume + download'),
-    L('    github [repo]       Show GitHub profile / repo README in terminal'), L(''),
+    L('    github [repo]       Show GitHub profile / repo README in terminal'),
+    L(''),
     L('  SYSTEM'),
     L('    theme [name]         Quick-switch theme'),
     L('    theme list           List all available themes'),
     L('    theme add <n> <hex>  Create custom theme'),
     L('    theme remove <name>  Delete a custom theme'),
-    L('    theme info <name>    Show theme color values'), L(''),
+    L('    theme info <name>    Show theme color values'),
+    L(''),
     L('    crt                 Toggle CRT scanline effect'),
     L('    keys                Toggle mechanical key click sound'),
     L('    clear               Clear terminal screen'),
-    L('    help                Show this manual'), L(''),
+    L('    help                Show this manual'),
+    L(''),
     L('  SHORTCUTS'),
     L('    Tab                 Auto-complete commands and paths'),
     L('    Up/Down             Scroll command history'),
     L('    Ctrl+L              Clear screen'),
-    L('    Esc                 Cancel current input'), L(''),
+    L('    Esc                 Cancel current input'),
+    L(''),
   ];
 }
 
@@ -988,16 +1525,38 @@ function cmdProjects(_args: string[], ctx: CommandContext): OutputLine[] {
 }
 
 // ── Tab / ghost-text completion ─────────────────────────────────────────
-const ALL_CMDS = ['ls','cd','cat','whoami','skills','experience','education','github','contact','resume','theme','crt','keys','clear','help','projects','profile'];
+const ALL_CMDS = [
+  'ls',
+  'cd',
+  'cat',
+  'whoami',
+  'skills',
+  'experience',
+  'education',
+  'github',
+  'contact',
+  'resume',
+  'theme',
+  'crt',
+  'keys',
+  'clear',
+  'help',
+  'projects',
+  'profile',
+];
 
-export function getTabCompletion(input: string, cwd: string, fs: FSNode): string {
+export function getTabCompletion(
+  input: string,
+  cwd: string,
+  fs: FSNode,
+): string {
   const parts = input.split(/\s+/);
   if (parts.length <= 1) {
     const m = ALL_CMDS.find(c => c.startsWith(parts[0]));
     return m ? m : input;
   }
   const cmd = parts[0];
-  if (!['ls','cd','cat'].includes(cmd)) return input;
+  if (!['ls', 'cd', 'cat'].includes(cmd)) return input;
   const pathPartial = parts[parts.length - 1];
   const dirParts = pathPartial.split('/');
   const prefix = dirParts.pop() || '';
@@ -1009,7 +1568,14 @@ export function getTabCompletion(input: string, cwd: string, fs: FSNode): string
   if (matches.length === 1) {
     const c = matches[0];
     const sfx = node.children[c].type === 'directory' ? '/' : '';
-    return parts.slice(0, -1).join(' ') + ' ' + dirPath + (dirPath ? '/' : '') + c + sfx;
+    return (
+      parts.slice(0, -1).join(' ') +
+      ' ' +
+      dirPath +
+      (dirPath ? '/' : '') +
+      c +
+      sfx
+    );
   }
   return input;
 }
@@ -1021,7 +1587,7 @@ export function getGhostText(input: string, cwd: string, fs: FSNode): string {
     return m ? m.slice(parts[0].length) : '';
   }
   const cmd = parts[0];
-  if (!['ls','cd','cat'].includes(cmd)) return '';
+  if (!['ls', 'cd', 'cat'].includes(cmd)) return '';
   const pathPartial = parts[parts.length - 1];
   const dirParts = pathPartial.split('/');
   const prefix = dirParts.pop() || '';
@@ -1032,7 +1598,10 @@ export function getGhostText(input: string, cwd: string, fs: FSNode): string {
   const matches = Object.keys(node.children).filter(n => n.startsWith(prefix));
   if (matches.length === 1) {
     const c = matches[0];
-    return c.slice(prefix.length) + (node.children[c].type === 'directory' ? '/' : '');
+    return (
+      c.slice(prefix.length) +
+      (node.children[c].type === 'directory' ? '/' : '')
+    );
   }
   return '';
 }

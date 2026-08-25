@@ -41,6 +41,7 @@ export interface CommandContext {
   args: string[];
   cwd: string;
   fs: FSNode;
+  theme: ThemeName;
   setCwd: (path: string) => void;
   setTheme: (theme: ThemeName) => void;
   setCrt: (on: boolean) => void;

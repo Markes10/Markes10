@@ -3,12 +3,18 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { OutputLine, ThemeName } from '@/lib/terminal/types';
 import { fileSystem } from '@/lib/terminal/fileSystem';
-import { executeCommand, getTabCompletion, getGhostText } from '@/lib/terminal/commands';
+import {
+  executeCommand,
+  getTabCompletion,
+  getGhostText,
+  setCommandHistory,
+} from '@/lib/terminal/commands';
 import { createProfileCardHTML } from '@/lib/terminal/profileArt';
 import { getThemeColors } from '@/lib/terminal/themeRegistry';
+import { copyTextToClipboard, pasteTextFromClipboard } from '@/lib/terminal/clipboard';
 const BOOT_LINES = [
-  { text: 'RETRO BIOS v2.4.1', delay: 0 },
-  { text: 'Copyright (C) 2024 RetroSystems Inc.', delay: 80 },
+  { text: 'GUESTOS BIOS V2.4.1', delay: 0 },
+  { text: 'Copyright (C) 2024 GuestOS Systems Inc.', delay: 80 },
   { text: '', delay: 200 },
   { text: 'Memory Test: 640K OK', delay: 400 },
   { text: 'Memory Test: 524288K OK', delay: 700 },
@@ -29,15 +35,15 @@ const BOOT_LINES = [
 ];
 
 const BANNER = `
- ██████╗██╗      █████╗ ███████╗███████╗██╗███╗   ██╗ ██████╗ 
-██╔════╝██║     ██╔══██╗██╔════╝██╔════╝██║████╗  ██║██╔═══██╗
-██║     ██║     ███████║███████╗███████╗██║██╔██╗ ██║██║   ██║
-██║     ██║     ██╔══██╗╚════██║╚════██║██║██║╚██╗██║██║   ██║
-╚██████╗███████╗██║  ██║███████║███████║██║██║ ╚████║╚██████╔╝
- ╚═════╝╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+ ██████╗ ██╗   ██╗███████╗███████╗████████╗     ██████╗ ███████╗
+██╔════╝ ██║   ██║██╔════╝██╔════╝╚══██╔══╝    ██╔═══██╗██╔════╝
+██║  ███╗██║   ██║█████╗  ███████╗   ██║       ██║   ██║███████╗
+██║   ██║██║   ██║██╔══╝  ╚════██║   ██║       ██║   ██║╚════██║
+╚██████╔╝╚██████╔╝███████╗███████║   ██║       ╚██████╔╝███████║
+ ╚═════╝  ╚═════╝ ╚══════╝╚══════╝   ╚═╝        ╚═════╝ ╚══════╝
 
-          D W E E P A N   G A I N   --   P O R T F O L I O   O S
-          =======================================================
+          G U E S T   O S   --   G U E S T O S   T E R M I N A L
+          ======================================================
 
           type 'help' to read the manual
 `;
@@ -51,13 +57,21 @@ function playKeySound() {
     const gain = audioCtx.createGain();
     osc.connect(gain);
     gain.connect(audioCtx.destination);
-    osc.frequency.setValueAtTime(800 + Math.random() * 400, audioCtx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.05);
+    osc.frequency.setValueAtTime(
+      800 + Math.random() * 400,
+      audioCtx.currentTime,
+    );
+    osc.frequency.exponentialRampToValueAtTime(
+      200,
+      audioCtx.currentTime + 0.05,
+    );
     gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
     osc.start(audioCtx.currentTime);
     osc.stop(audioCtx.currentTime + 0.06);
-  } catch { /* */ }
+  } catch {
+    /* */
+  }
 }
 
 export default function Terminal() {
@@ -73,23 +87,105 @@ export default function Terminal() {
   const [bootDone, setBootDone] = useState(false);
   const [cursorVisible, setCursorVisible] = useState(true);
   const [themeFading, setThemeFading] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+
+  // Track session start for uptime command
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__SESSION_START = Date.now();
+    }
+  }, []);
+
+  // Sync command history for the `history` command
+  useEffect(() => {
+    setCommandHistory(history);
+  }, [history]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<HTMLDivElement>(null);
 
   // We keep refs to the latest state so the global listener always sees current values
-  const stateRef = useRef({ input, output, cwd, history, historyIdx, isBooting, bootDone, keysOn, crtOn });
+  const stateRef = useRef({
+    input,
+    output,
+    cwd,
+    history,
+    historyIdx,
+    isBooting,
+    bootDone,
+    keysOn,
+    crtOn,
+  });
 
   // Stable dispatchers for use inside the global keydown listener
   const stableDispatch = useRef({ setTheme, setCrtOn, setKeysOn, setCwd });
 
   // Sync refs on every render (safe because this doesn't cause side effects)
   useEffect(() => {
-    stateRef.current = { input, output, cwd, history, historyIdx, isBooting, bootDone, keysOn, crtOn };
+    stateRef.current = {
+      input,
+      output,
+      cwd,
+      history,
+      historyIdx,
+      isBooting,
+      bootDone,
+      keysOn,
+      crtOn,
+    };
     stableDispatch.current = { setTheme, setCrtOn, setKeysOn, setCwd };
   });
 
   const colors = getThemeColors(theme);
+
+  const renderProfileCard = useCallback(
+    (nextTheme = theme) => {
+      if (!bootDone) return;
+
+      const loadingId = `profile-loading-${Date.now()}`;
+      const separatorId = `profile-separator-${Date.now()}`;
+
+      setOutput(prev => {
+        const filtered = prev.filter(
+          line =>
+            !line.id.startsWith('profile-loading-') &&
+            !line.id.startsWith('profile-separator-') &&
+            !line.id.startsWith('profile-art-') &&
+            !line.id.startsWith('profile-end-'),
+        );
+
+        return [
+          ...filtered,
+          { id: separatorId, content: '', type: 'output' },
+          { id: loadingId, content: '  Loading profile card...', type: 'output' },
+        ];
+      });
+
+      createProfileCardHTML(nextTheme).then(html => {
+        setOutput(prev => {
+          const filtered = prev.filter(
+            line =>
+              !line.id.startsWith('profile-loading-') &&
+              !line.id.startsWith('profile-separator-') &&
+              !line.id.startsWith('profile-art-') &&
+              !line.id.startsWith('profile-end-'),
+          );
+
+          return [
+            ...filtered,
+            {
+              id: `profile-art-${Date.now()}`,
+              content: html,
+              type: 'html',
+            },
+            { id: `profile-end-${Date.now()}`, content: '', type: 'output' },
+          ];
+        });
+        setTimeout(() => termRef.current?.focus(), 50);
+      });
+    },
+    [bootDone, theme],
+  );
 
   // Blink cursor at 1.06s
   useEffect(() => {
@@ -127,7 +223,10 @@ export default function Terminal() {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
         if (s.history.length === 0) return;
-        const newIdx = s.historyIdx === -1 ? 0 : Math.min(s.historyIdx + 1, s.history.length - 1);
+        const newIdx =
+          s.historyIdx === -1
+            ? 0
+            : Math.min(s.historyIdx + 1, s.history.length - 1);
         setHistoryIdx(newIdx);
         setInput(s.history[newIdx]);
         return;
@@ -158,8 +257,15 @@ export default function Terminal() {
       // Ctrl+C
       if (e.key === 'c' && e.ctrlKey) {
         e.preventDefault();
-        const promptStr = `guest@retrosh:${s.cwd}$ `;
-        setOutput(prev => [...prev, { id: `ctrlc-${Date.now()}`, content: `${promptStr}${s.input}^C`, type: 'input' }]);
+        const promptStr = 'Guest@Dweepan> ';
+        setOutput(prev => [
+          ...prev,
+          {
+            id: `ctrlc-${Date.now()}`,
+            content: `${promptStr}${s.input}^C`,
+            type: 'input',
+          },
+        ]);
         setInput('');
         setHistoryIdx(-1);
         return;
@@ -172,31 +278,52 @@ export default function Terminal() {
         return;
       }
 
+      // Backspace
+      if (e.key === 'Backspace' || e.code === 'Backspace') {
+        e.preventDefault();
+        setInput(prev => prev.slice(0, -1));
+        setHistoryIdx(-1);
+        if (s.keysOn) playKeySound();
+        return;
+      }
+
       // Enter
       if (e.key === 'Enter') {
         e.preventDefault();
         const trimmed = s.input.trim();
         if (!trimmed) return;
 
-        const promptStr = `guest@retrosh:${s.cwd}$ `;
+        const promptStr = 'Guest@Dweepan> ';
         const newOutput: OutputLine[] = [
           ...s.output,
-          { id: `echo-${Date.now()}`, content: `${promptStr}${trimmed}`, type: 'input' },
+          {
+            id: `echo-${Date.now()}`,
+            content: `${promptStr}${trimmed}`,
+            type: 'input',
+          },
         ];
 
         const handleTheme = (t: string) => {
           setThemeFading(true);
-          setTimeout(() => { stableDispatch.current.setTheme(t); setThemeFading(false); }, 200);
+          setTimeout(() => {
+            stableDispatch.current.setTheme(t);
+            setThemeFading(false);
+          }, 200);
         };
 
         const ctx = {
-          args: [], cwd: s.cwd, fs: fileSystem,
+          args: [],
+          cwd: s.cwd,
+          fs: fileSystem,
+          theme,
           setCwd: (p: string) => stableDispatch.current.setCwd(p),
           setTheme: handleTheme,
           setCrt: (v: boolean) => stableDispatch.current.setCrtOn(v),
           setKeys: (v: boolean) => stableDispatch.current.setKeysOn(v),
-          appendOutput: (lines: OutputLine[]) => setOutput(prev => [...prev, ...lines]),
-          crtOn: s.crtOn, keysOn: s.keysOn,
+          appendOutput: (lines: OutputLine[]) =>
+            setOutput(prev => [...prev, ...lines]),
+          crtOn: s.crtOn,
+          keysOn: s.keysOn,
         } as any;
 
         const result = executeCommand(trimmed, ctx);
@@ -208,7 +335,9 @@ export default function Terminal() {
           setOutput(newOutput);
         }
 
-        setHistory(prev => [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 100));
+        setHistory(prev =>
+          [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 100),
+        );
         setHistoryIdx(-1);
         setInput('');
         return;
@@ -227,9 +356,21 @@ export default function Terminal() {
       let char = '';
       if (e.key.length === 1) {
         char = e.key;
-      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code && e.code.startsWith('Key')) {
+      } else if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        e.code &&
+        e.code.startsWith('Key')
+      ) {
         char = e.code.slice(3).toLowerCase();
-      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code && e.code.startsWith('Digit')) {
+      } else if (
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        e.code &&
+        e.code.startsWith('Digit')
+      ) {
         char = e.code.slice(5);
       } else if (!e.ctrlKey && !e.metaKey && !e.altKey && e.code === 'Space') {
         char = ' ';
@@ -251,16 +392,25 @@ export default function Terminal() {
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [theme]);
+
+  useEffect(() => {
+    if (!bootDone) return;
+    renderProfileCard(theme);
+  }, [theme, bootDone, renderProfileCard]);
 
   // Boot sequence
   useEffect(() => {
     const bootOutput: OutputLine[] = [];
     const timeouts: ReturnType<typeof setTimeout>[] = [];
 
-    BOOT_LINES.forEach((line) => {
+    BOOT_LINES.forEach(line => {
       const t = setTimeout(() => {
-        bootOutput.push({ id: `boot-${Date.now()}-${Math.random()}`, content: line.text, type: 'boot' });
+        bootOutput.push({
+          id: `boot-${Date.now()}-${Math.random()}`,
+          content: line.text,
+          type: 'boot',
+        });
         setOutput([...bootOutput]);
       }, line.delay);
       timeouts.push(t);
@@ -270,32 +420,23 @@ export default function Terminal() {
       const bannerLines = BANNER.split('\n');
       bannerLines.forEach((line, i) => {
         const bt = setTimeout(() => {
-          bootOutput.push({ id: `banner-${Date.now()}-${i}`, content: line, type: 'banner' });
+          bootOutput.push({
+            id: `banner-${Date.now()}-${i}`,
+            content: line,
+            type: 'banner',
+          });
           setOutput([...bootOutput]);
         }, i * 15);
         timeouts.push(bt);
       });
 
-      const doneT = setTimeout(() => {
-        setIsBooting(false);
-        setBootDone(true);
-        // Show colorful ASCII profile portrait after boot
-        setTimeout(() => {
-          setOutput(prev => [
-            ...prev,
-            { id: `profile-${Date.now()}`, content: '', type: 'output' },
-            { id: `profile-loading-${Date.now()}`, content: '  Rendering profile portrait...', type: 'output' },
-          ]);
-          createProfileCardHTML().then(html => {
-            setOutput(prev => [
-              ...prev.slice(0, -1), // remove loading line
-              { id: `profile-art-${Date.now()}`, content: html, type: 'html' },
-              { id: `profile-end-${Date.now()}`, content: '', type: 'output' },
-            ]);
-            setTimeout(() => termRef.current?.focus(), 50);
-          });
-        }, 200);
-      }, bannerLines.length * 15 + 300);
+      const doneT = setTimeout(
+        () => {
+          setIsBooting(false);
+          setBootDone(true);
+        },
+        bannerLines.length * 15 + 300,
+      );
       timeouts.push(doneT);
     }, 4000);
     timeouts.push(bannerT);
@@ -303,19 +444,45 @@ export default function Terminal() {
     return () => timeouts.forEach(clearTimeout);
   }, []);
 
+  useEffect(() => {
+    const handleCopyPaste = async (event: KeyboardEvent) => {
+      if (!bootDone) return;
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'c') {
+        const selection = window.getSelection()?.toString();
+        if (selection) {
+          event.preventDefault();
+          await copyTextToClipboard(selection);
+          setSelectedText(selection);
+        }
+      }
+
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'v') {
+        event.preventDefault();
+        const pasted = await pasteTextFromClipboard();
+        if (pasted) {
+          setInput(prev => `${prev}${pasted}`);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleCopyPaste);
+    return () => window.removeEventListener('keydown', handleCopyPaste);
+  }, [bootDone]);
+
   // Ghost text
   const ghostText = useMemo(() => {
     if (!bootDone) return '';
     return getGhostText(input, cwd, fileSystem);
   }, [input, cwd, bootDone]);
 
-  const promptStr = `guest@retrosh:${cwd}$ `;
+  const promptStr = 'Guest@Dweepan> ';
 
   return (
     <div
       ref={termRef}
       tabIndex={0}
-      className="relative w-full h-screen overflow-hidden font-mono select-none outline-none"
+      className="terminal-app relative w-full h-screen overflow-hidden font-mono select-none outline-none"
       style={{
         backgroundColor: colors.bg,
         color: colors.text,
@@ -326,83 +493,147 @@ export default function Terminal() {
     >
       {/* CRT Scanlines */}
       {crtOn && (
-        <div className="pointer-events-none absolute inset-0 z-30" style={{
-          background: `repeating-linear-gradient(0deg, transparent, transparent 2px, ${colors.scanline} 2px, ${colors.scanline} 4px)`,
-        }} />
+        <div
+          className="pointer-events-none absolute inset-0 z-30"
+          style={{
+            background: `repeating-linear-gradient(0deg, transparent, transparent 2px, ${colors.scanline} 2px, ${colors.scanline} 4px)`,
+          }}
+        />
       )}
 
       {/* CRT Vignette */}
       {crtOn && (
-        <div className="pointer-events-none absolute inset-0 z-20" style={{
-          background: 'radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%)',
-        }} />
+        <div
+          className="pointer-events-none absolute inset-0 z-20"
+          style={{
+            background:
+              'radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.6) 100%)',
+          }}
+        />
       )}
 
       {/* Screen glow */}
       {crtOn && (
-        <div className="pointer-events-none absolute inset-0 z-10" style={{ backgroundColor: colors.crtGlow }} />
+        <div
+          className="pointer-events-none absolute inset-0 z-10"
+          style={{ backgroundColor: colors.crtGlow }}
+        />
       )}
 
       {/* Terminal scrollable area */}
-      <div ref={scrollRef} className="relative z-10 h-[calc(100vh-36px)] overflow-y-auto px-4 py-3 text-sm leading-relaxed" style={{
-        scrollbarWidth: 'thin',
-        scrollbarColor: `${colors.textDim} transparent`,
-      }}>
+      <div
+        ref={scrollRef}
+        className="terminal-scroll relative z-10 h-[calc(100vh-36px)] overflow-y-auto px-4 py-3 text-sm leading-relaxed"
+        style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${colors.textDim} transparent`,
+        }}
+      >
         {/* Output */}
-        {output.map(line => (
+        {output.map(line =>
           line.type === 'html' ? (
             <div
               key={line.id}
-              className="whitespace-pre"
-              style={{ lineHeight: '1.15', fontSize: '12px', letterSpacing: '0.5px' }}
+              className="terminal-output whitespace-pre select-text"
+              style={{
+                lineHeight: '1.15',
+                fontSize: '12px',
+                letterSpacing: '0.5px',
+              }}
               dangerouslySetInnerHTML={{ __html: line.content }}
+              onMouseUp={() => {
+                const selection = window.getSelection()?.toString();
+                if (selection) setSelectedText(selection);
+              }}
             />
           ) : (
-            <div key={line.id} className="whitespace-pre-wrap break-all" style={{
-              color: line.type === 'error' ? colors.accent
-                : line.type === 'input' ? colors.textDim
-                : line.type === 'banner' ? colors.text
-                : line.type === 'boot' ? colors.textDim
-                : colors.text,
-              fontWeight: line.type === 'banner' ? 'bold' : 'normal',
-              fontSize: line.type === 'banner' ? '11px' : undefined,
-              lineHeight: line.type === 'banner' ? '1.1' : undefined,
-              letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
-            }}>{line.content || '\u00A0'}</div>
-          )
-        ))}
+            <div
+              key={line.id}
+              className="terminal-output whitespace-pre-wrap break-all select-text"
+              style={{
+                color:
+                  line.type === 'error'
+                    ? colors.accent
+                    : line.type === 'input'
+                      ? colors.textDim
+                      : line.type === 'banner'
+                        ? colors.text
+                        : line.type === 'boot'
+                          ? colors.textDim
+                          : colors.text,
+                fontWeight: line.type === 'banner' ? 'bold' : 'normal',
+                fontSize: line.type === 'banner' ? '11px' : undefined,
+                lineHeight: line.type === 'banner' ? '1.1' : undefined,
+                letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
+              }}
+              onMouseUp={() => {
+                const selection = window.getSelection()?.toString();
+                if (selection) setSelectedText(selection);
+              }}
+            >
+              {line.content || '\u00A0'}
+            </div>
+          ),
+        )}
+
+        {selectedText && (
+          <div
+            className="mt-2 inline-block rounded border px-2 py-1 text-[10px] uppercase tracking-wide"
+            style={{
+              borderColor: `${colors.text}66`,
+              color: colors.accent,
+              background: colors.textGhost,
+            }}
+          >
+            selection copied: {selectedText.slice(0, 40)}
+            {selectedText.length > 40 ? '…' : ''}
+          </div>
+        )}
 
         {/* Input line */}
         {bootDone && (
           <div className="flex whitespace-pre">
-            <span style={{ color: colors.prompt, fontWeight: 'bold' }}>{promptStr}</span>
+            <span style={{ color: colors.prompt, fontWeight: 'bold' }}>
+              {promptStr}
+            </span>
             <span>{input}</span>
-            {ghostText && <span style={{ color: colors.textGhost }}>{ghostText}</span>}
-            <span className="inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0" style={{
-              backgroundColor: cursorVisible ? colors.text : 'transparent',
-              transition: 'background-color 0.1s',
-            }} />
+            {ghostText && (
+              <span style={{ color: colors.textGhost }}>{ghostText}</span>
+            )}
+            <span
+              className="inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0"
+              style={{
+                backgroundColor: cursorVisible ? colors.text : 'transparent',
+                transition: 'background-color 0.1s',
+              }}
+            />
           </div>
         )}
 
         {/* Boot cursor */}
         {isBooting && (
           <div className="flex items-center">
-            <span className="inline-block w-[8px] h-[16px]" style={{
-              backgroundColor: cursorVisible ? colors.text : 'transparent',
-              animation: 'blink 1.06s step-end infinite',
-            }} />
+            <span
+              className="inline-block w-[8px] h-[16px]"
+              style={{
+                backgroundColor: cursorVisible ? colors.text : 'transparent',
+                animation: 'blink 1.06s step-end infinite',
+              }}
+            />
           </div>
         )}
       </div>
 
       {/* Status bar */}
       {bootDone && (
-        <div className="relative z-40 flex items-center justify-between px-4 h-[36px] text-xs font-mono border-t" style={{
-          color: colors.textDim,
-          backgroundColor: colors.bg,
-          borderColor: `${colors.textDim}33`,
-        }}>
+        <div
+          className="relative z-40 flex items-center justify-between px-4 h-[36px] text-xs font-mono border-t"
+          style={{
+            color: colors.textDim,
+            backgroundColor: colors.bg,
+            borderColor: `${colors.textDim}33`,
+          }}
+        >
           <div className="flex items-center gap-3">
             <span>theme:{theme}</span>
             <span>crt:{crtOn ? 'on' : 'off'}</span>

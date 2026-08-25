@@ -1,5 +1,19 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
 
 export async function GET() {
-  return NextResponse.json({ message: "Hello, world!" });
+  try {
+    // Verify database connectivity
+    await db.user.count();
+    return NextResponse.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      database: 'connected',
+    });
+  } catch {
+    return NextResponse.json(
+      { status: 'error', database: 'disconnected' },
+      { status: 503 },
+    );
+  }
 }

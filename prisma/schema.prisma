@@ -19,6 +19,7 @@ model User {
   name      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  posts     Post[]
 }
 
 model Post {
@@ -29,4 +30,19 @@ model Post {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  author    User     @relation(fields: [authorId], references: [id])
+
+  @@unique([authorId, title])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  title       String   @unique
+  description String
+  stack       String
+  highlights  String
+  url         String?
+  githubUrl   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

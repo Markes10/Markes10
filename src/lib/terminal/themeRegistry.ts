@@ -1,10 +1,10 @@
 /**
  * RETROSHELL Theme Registry
- * 
+ *
  * Manages built-in and user-created color themes.
  * Built-in themes cannot be deleted. Custom themes are
  * stored in-memory (persisted across the session).
- * 
+ *
  * Usage in Terminal.tsx:
  *   const colors = getThemeColors('amber');
  *   const names  = getAllThemeNames();
@@ -156,7 +156,7 @@ export function getCustomNames(): string[] {
 /**
  * Add a custom theme.
  * Returns { ok: true } or { ok: false, error: string }.
- * 
+ *
  * Required keys: text, bg, prompt
  * Optional keys: textDim, textGhost, accent, scanline, crtGlow
  * Missing optional keys get smart defaults derived from `text` color.
@@ -166,15 +166,25 @@ export function addTheme(
   colors: Partial<ThemeColors> & { text: string; bg: string; prompt: string },
 ): { ok: true } | { ok: false; error: string } {
   const key = name.toLowerCase();
-  if (key in BUILT_IN) return { ok: false, error: `"${name}" is a built-in theme and cannot be overwritten` };
-  if (key.length === 0) return { ok: false, error: 'theme name cannot be empty' };
-  if (key.includes(' ')) return { ok: false, error: 'theme name cannot contain spaces' };
-  if (/["<>]/.test(key)) return { ok: false, error: 'theme name contains invalid characters' };
+  if (key in BUILT_IN)
+    return {
+      ok: false,
+      error: `"${name}" is a built-in theme and cannot be overwritten`,
+    };
+  if (key.length === 0)
+    return { ok: false, error: 'theme name cannot be empty' };
+  if (key.includes(' '))
+    return { ok: false, error: 'theme name cannot contain spaces' };
+  if (/["<>]/.test(key))
+    return { ok: false, error: 'theme name contains invalid characters' };
 
   // Validate hex colors
   for (const field of ['text', 'bg', 'prompt'] as const) {
     if (!isValidColor(colors[field])) {
-      return { ok: false, error: `invalid color for "${field}": ${colors[field]}. Use hex (#ff0000) or rgba()` };
+      return {
+        ok: false,
+        error: `invalid color for "${field}": ${colors[field]}. Use hex (#ff0000) or rgba()`,
+      };
     }
   }
 
@@ -199,10 +209,17 @@ export function addTheme(
  * Remove a custom theme.
  * Cannot remove built-in themes.
  */
-export function removeTheme(name: string): { ok: true } | { ok: false; error: string } {
+export function removeTheme(
+  name: string,
+): { ok: true } | { ok: false; error: string } {
   const key = name.toLowerCase();
-  if (key in BUILT_IN) return { ok: false, error: `"${name}" is a built-in theme and cannot be removed` };
-  if (!(key in customThemes)) return { ok: false, error: `theme "${name}" not found` };
+  if (key in BUILT_IN)
+    return {
+      ok: false,
+      error: `"${name}" is a built-in theme and cannot be removed`,
+    };
+  if (!(key in customThemes))
+    return { ok: false, error: `theme "${name}" not found` };
   delete customThemes[key];
   return { ok: true };
 }
@@ -217,14 +234,21 @@ function isValidColor(c: string): boolean {
 function parseHex(hex: string): { r: number; g: number; b: number } | null {
   const m = hex.match(/^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/);
   if (!m) return null;
-  return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16) };
+  return {
+    r: parseInt(m[1], 16),
+    g: parseInt(m[2], 16),
+    b: parseInt(m[3], 16),
+  };
 }
 
 /** Darken a hex color by a factor (0-1, lower = darker) */
 function darken(hex: string, factor: number): string {
   const c = parseHex(hex);
   if (!c) return hex;
-  const d = (v: number) => Math.round(v * factor).toString(16).padStart(2, '0');
+  const d = (v: number) =>
+    Math.round(v * factor)
+      .toString(16)
+      .padStart(2, '0');
   return `#${d(c.r)}${d(c.g)}${d(c.b)}`;
 }
 
@@ -239,7 +263,10 @@ function hexToRgba(hex: string, alpha: number): string {
 function lighten(hex: string, factor: number): string {
   const c = parseHex(hex);
   if (!c) return hex;
-  const l = (v: number) => Math.min(255, Math.round(v + (255 - v) * factor)).toString(16).padStart(2, '0');
+  const l = (v: number) =>
+    Math.min(255, Math.round(v + (255 - v) * factor))
+      .toString(16)
+      .padStart(2, '0');
   return `#${l(c.r)}${l(c.g)}${l(c.b)}`;
 }
 
@@ -247,7 +274,10 @@ function lighten(hex: string, factor: number): string {
  * Auto-derive optional theme colors from the primary text color.
  * This way users only need to provide text, bg, prompt.
  */
-function deriveOptionalColors(textColor: string, bgColor: string): Omit<ThemeColors, 'text' | 'bg' | 'prompt'> {
+function deriveOptionalColors(
+  textColor: string,
+  bgColor: string,
+): Omit<ThemeColors, 'text' | 'bg' | 'prompt'> {
   return {
     textDim: darken(textColor, 0.55),
     textGhost: hexToRgba(textColor, 0.3),

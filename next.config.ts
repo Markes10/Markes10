@@ -1,10 +1,10 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  /* config options here */
-  typescript: {
-    ignoreBuildErrors: true,
+  output: 'standalone',
+  allowedDevOrigins: ['127.0.0.1'],
+  turbopack: {
+    root: __dirname,
   },
   reactStrictMode: false,
 };

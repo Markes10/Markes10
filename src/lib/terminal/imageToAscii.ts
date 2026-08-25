@@ -18,7 +18,10 @@ export async function getProfileAscii(
   targetWidth: number = 40,
 ): Promise<string> {
   if (profileCache[targetWidth]) return profileCache[targetWidth];
-  profileCache[targetWidth] = await convertImageToAscii('/profile.jpg', targetWidth);
+  profileCache[targetWidth] = await convertImageToAscii(
+    '/profile.jpg',
+    targetWidth,
+  );
   return profileCache[targetWidth];
 }
 
@@ -62,7 +65,7 @@ function charForBrightness(b: number): string {
   if (b > 0.92) return ' ';
   if (b > 0.72) return '░';
   if (b > 0.45) return '▒';
-  if (b > 0.2)  return '▓';
+  if (b > 0.2) return '▓';
   return '█';
 }
 
@@ -99,7 +102,10 @@ function renderAscii(img: HTMLImageElement, targetCols: number): string {
 
     for (let x = 0; x < cols; x++) {
       const i = (y * cols + x) * 4;
-      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+      const r = data[i],
+        g = data[i + 1],
+        b = data[i + 2],
+        a = data[i + 3];
 
       // Transparent or near-white → empty space
       if (a < 25) {
@@ -118,7 +124,9 @@ function renderAscii(img: HTMLImageElement, targetCols: number): string {
       }
 
       // Quantise color for grouping efficiency
-      const qr = q(r), qg = q(g), qb = q(b);
+      const qr = q(r),
+        qg = q(g),
+        qb = q(b);
       const color = `rgb(${qr},${qg},${qb})`;
 
       if (color === curColor) {

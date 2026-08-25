@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -7,13 +7,16 @@
 }
 
 /* Reset everything for the terminal */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   overflow: hidden;
@@ -37,8 +40,125 @@ html, body {
   background: rgba(255, 176, 0, 0.4);
 }
 
+.terminal-output {
+  animation: terminal-line-in 180ms ease-out both;
+}
+
+.skills-shell {
+  width: min(100%, 1100px);
+  margin: 8px 0;
+  white-space: normal;
+  animation: skills-panel-in 420ms ease-out both;
+}
+
+.skills-panel {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid var(--skills-border);
+  border-radius: 10px;
+  background: var(--skills-bg);
+  box-shadow: inset 0 0 0 1px var(--skills-ghost), 0 0 18px var(--skills-ghost);
+}
+
+.skills-section,
+.skills-resume-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skills-heading {
+  color: var(--skills-text);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+}
+
+.skills-language-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.skills-language-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--skills-border);
+  border-radius: 999px;
+  background: var(--skills-ghost);
+  color: var(--skills-text);
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.skills-language-pill:hover {
+  transform: translateY(-2px);
+  background: var(--skills-border);
+}
+
+.skills-resume-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: 8px 18px;
+}
+
+.skills-resume-item {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.skills-resume-item span {
+  font-weight: 700;
+}
+
+@keyframes terminal-line-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes skills-panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 640px) {
+  .terminal-scroll {
+    padding: 10px;
+    font-size: 12px;
+  }
+
+  .skills-panel {
+    padding: 12px;
+    gap: 13px;
+  }
+
+  .skills-heading {
+    font-size: 12px;
+  }
+
+  .skills-language-pill {
+    font-size: 10px;
+    min-height: 26px;
+    padding-inline: 8px;
+  }
+}
+
 /* Blink animation for boot cursor */
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }

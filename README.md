@@ -8,6 +8,10 @@
   <img alt="Profile banner" src="https://raw.githubusercontent.com/Markes10/Markes10/main/light_mode.svg">
 </picture>
 
+## Interactive CLI Portfolio
+
+Explore my [GuestOS terminal portfolio](https://github.com/Markes10/Markes10) or run it locally with `npm install` and `npm run dev`.
+
 <!--
 **Markes10/Markes10** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 

@@ -2,7 +2,7 @@
 
 ## Interactive CLI Portfolio
 
-Open the [GuestOS terminal portfolio](https://markes10.github.io/Markes10/) or run it locally with `npm install` and `npm run dev`.
+Open the [HERE IS THE FULL DETAILS ABOUT THE PROFLE](https://markes10.github.io/Markes10/) or run it locally with `npm install` and `npm run dev`.
 
 
 ##PROFILE 

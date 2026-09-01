@@ -119,10 +119,6 @@ JCL
 
 JSON
 
-Java
-
-JavaScript
-
 JetBrains MPS
 
 Jinja
@@ -207,8 +203,6 @@ Puppet
 
 PureBasic
 
-Python
-
 Q#
 
 R
@@ -274,8 +268,6 @@ Tcl
 TeX
 
 Thrift
-
-TypeScript
 
 TypeSpec
 

@@ -10,8 +10,8 @@ describe('themeRegistry', () => {
   it('returns colors for a known theme', () => {
     const colors = getThemeColors('amber');
     expect(colors).toBeDefined();
-    expect(colors.text).toBe('#ffb000');
-    expect(colors.bg).toBe('#0a0a00');
+    expect(colors.text).toBe('#e8c489');
+    expect(colors.bg).toBe('#0b0805');
   });
 
   it('returns fallback for unknown theme', () => {

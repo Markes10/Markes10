@@ -11,41 +11,32 @@ import {
 } from '@/lib/terminal/commands';
 import { createProfileCardHTML } from '@/lib/terminal/profileArt';
 import { getThemeColors } from '@/lib/terminal/themeRegistry';
-import { copyTextToClipboard, pasteTextFromClipboard } from '@/lib/terminal/clipboard';
+import {
+  copyTextToClipboard,
+  pasteTextFromClipboard,
+} from '@/lib/terminal/clipboard';
 const BOOT_LINES = [
-  { text: 'GUESTOS BIOS V2.4.1', delay: 0 },
-  { text: 'Copyright (C) 2024 GuestOS Systems Inc.', delay: 80 },
+  { text: 'PHOSPHOR BIOS v1.06 — POST', delay: 0 },
+  { text: '', delay: 80 },
   { text: '', delay: 200 },
-  { text: 'Memory Test: 640K OK', delay: 400 },
-  { text: 'Memory Test: 524288K OK', delay: 700 },
+  { text: 'mem check ................. 640K ok', delay: 400 },
+  { text: 'display ................... amber phosphor, 85 Hz', delay: 700 },
   { text: '', delay: 900 },
-  { text: 'Detecting IDE drives...', delay: 1100 },
-  { text: '  Primary Master  : RETRO-HDD 256MB', delay: 1400 },
-  { text: '  Secondary Master: RETRO-CDROM', delay: 1600 },
+  { text: 'mounting /posts ........... 6 documents', delay: 1100 },
+  { text: 'mounting /projects ........ 3 binaries', delay: 1400 },
+  { text: 'mounting /topics .......... 10 directories', delay: 1600 },
   { text: '', delay: 1800 },
-  { text: 'mounting resume.dat...', delay: 2100 },
-  { text: 'loading portfolio modules...', delay: 2500 },
-  { text: '  [OK] /about', delay: 2700 },
-  { text: '  [OK] /experience', delay: 2850 },
-  { text: '  [OK] /projects', delay: 3000 },
-  { text: '  [OK] /skills', delay: 3150 },
-  { text: '  [OK] /education', delay: 3300 },
-  { text: '  [OK] /contact', delay: 3450 },
+  { text: 'starting glm-sh ........... ok', delay: 2100 },
+  { text: 'last login: never. welcome, stranger.', delay: 2500 },
   { text: '', delay: 3700 },
 ];
 
 const BANNER = `
- ██████╗ ██╗   ██╗███████╗███████╗████████╗     ██████╗ ███████╗
-██╔════╝ ██║   ██║██╔════╝██╔════╝╚══██╔══╝    ██╔═══██╗██╔════╝
-██║  ███╗██║   ██║█████╗  ███████╗   ██║       ██║   ██║███████╗
-██║   ██║██║   ██║██╔══╝  ╚════██║   ██║       ██║   ██║╚════██║
-╚██████╔╝╚██████╔╝███████╗███████║   ██║       ╚██████╔╝███████║
- ╚═════╝  ╚═════╝ ╚══════╝╚══════╝   ╚═╝        ╚═════╝ ╚══════╝
-
-          G U E S T   O S   --   G U E S T O S   T E R M I N A L
-          ======================================================
-
-          type 'help' to read the manual
+████  █  █  ████  █████  ██████  ██████  ██████  ████  █
+█  █  █  █  █       █    █       █       █       █  █  █
+████  █  █  ████    █    ████    ████    ████    ████  █
+█     █  █     █    █    █       █       █       █ █   █
+█     ████  ████    █    █████   █       █████   █  █  █
 `;
 
 // Mechanical key click via Web Audio
@@ -157,7 +148,11 @@ export default function Terminal() {
         return [
           ...filtered,
           { id: separatorId, content: '', type: 'output' },
-          { id: loadingId, content: '  Loading profile card...', type: 'output' },
+          {
+            id: loadingId,
+            content: '  Loading profile card...',
+            type: 'output',
+          },
         ];
       });
 
@@ -257,7 +252,7 @@ export default function Terminal() {
       // Ctrl+C
       if (e.key === 'c' && e.ctrlKey) {
         e.preventDefault();
-        const promptStr = 'Guest@Dweepan> ';
+        const promptStr = 'guest@phosphor:~$ ';
         setOutput(prev => [
           ...prev,
           {
@@ -293,7 +288,7 @@ export default function Terminal() {
         const trimmed = s.input.trim();
         if (!trimmed) return;
 
-        const promptStr = 'Guest@Dweepan> ';
+        const promptStr = 'guest@phosphor:~$ ';
         const newOutput: OutputLine[] = [
           ...s.output,
           {
@@ -394,11 +389,6 @@ export default function Terminal() {
     return () => window.removeEventListener('keydown', handler);
   }, [theme]);
 
-  useEffect(() => {
-    if (!bootDone) return;
-    renderProfileCard(theme);
-  }, [theme, bootDone, renderProfileCard]);
-
   // Boot sequence
   useEffect(() => {
     const bootOutput: OutputLine[] = [];
@@ -476,20 +466,21 @@ export default function Terminal() {
     return getGhostText(input, cwd, fileSystem);
   }, [input, cwd, bootDone]);
 
-  const promptStr = 'Guest@Dweepan> ';
+  const promptStr = 'guest@phosphor:~$ ';
 
   return (
     <div
       ref={termRef}
       tabIndex={0}
-      className="terminal-app relative w-full h-screen overflow-hidden font-mono select-none outline-none"
+      className="terminal-app relative flex h-screen w-full flex-col overflow-hidden select-none outline-none"
+      data-theme={theme}
       style={{
         backgroundColor: colors.bg,
         color: colors.text,
         transition: 'background-color 0.2s, color 0.2s',
         opacity: themeFading ? 0 : 1,
       }}
-      aria-label="RETROSHELL Terminal - type help for commands"
+      aria-label="Phosphor terminal - type help for commands"
     >
       {/* CRT Scanlines */}
       {crtOn && (
@@ -523,7 +514,7 @@ export default function Terminal() {
       {/* Terminal scrollable area */}
       <div
         ref={scrollRef}
-        className="terminal-scroll relative z-10 h-[calc(100vh-36px)] overflow-y-auto px-4 py-3 text-sm leading-relaxed"
+        className="terminal-scroll relative z-10 min-h-0 flex-1 overflow-y-auto text-sm leading-relaxed"
         style={{
           scrollbarWidth: 'thin',
           scrollbarColor: `${colors.textDim} transparent`,
@@ -535,6 +526,7 @@ export default function Terminal() {
             <div
               key={line.id}
               className="terminal-output whitespace-pre select-text"
+              data-type={line.type}
               style={{
                 lineHeight: '1.15',
                 fontSize: '12px',
@@ -550,6 +542,7 @@ export default function Terminal() {
             <div
               key={line.id}
               className="terminal-output whitespace-pre-wrap break-all select-text"
+              data-type={line.type}
               style={{
                 color:
                   line.type === 'error'
@@ -576,23 +569,9 @@ export default function Terminal() {
           ),
         )}
 
-        {selectedText && (
-          <div
-            className="mt-2 inline-block rounded border px-2 py-1 text-[10px] uppercase tracking-wide"
-            style={{
-              borderColor: `${colors.text}66`,
-              color: colors.accent,
-              background: colors.textGhost,
-            }}
-          >
-            selection copied: {selectedText.slice(0, 40)}
-            {selectedText.length > 40 ? '…' : ''}
-          </div>
-        )}
-
         {/* Input line */}
         {bootDone && (
-          <div className="flex whitespace-pre">
+          <div className="terminal-prompt flex whitespace-pre">
             <span style={{ color: colors.prompt, fontWeight: 'bold' }}>
               {promptStr}
             </span>
@@ -623,30 +602,6 @@ export default function Terminal() {
           </div>
         )}
       </div>
-
-      {/* Status bar */}
-      {bootDone && (
-        <div
-          className="relative z-40 flex items-center justify-between px-4 h-[36px] text-xs font-mono border-t"
-          style={{
-            color: colors.textDim,
-            backgroundColor: colors.bg,
-            borderColor: `${colors.textDim}33`,
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <span>theme:{theme}</span>
-            <span>crt:{crtOn ? 'on' : 'off'}</span>
-            <span>keys:{keysOn ? 'on' : 'silent'}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span>tab:complete</span>
-            <span>{'\u2191\u2193'}:history</span>
-            <span>ctrl-l:clear</span>
-            <span>esc:cancel</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

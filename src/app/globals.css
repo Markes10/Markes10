@@ -22,22 +22,125 @@ body {
   overflow: hidden;
   height: 100%;
   width: 100%;
-  background: #0a0a00;
+  background: #0b0805;
 }
 
-/* Custom scrollbar for the terminal */
+.terminal-app {
+  --terminal-bg: #0b0805;
+  --terminal-fg: #e8c489;
+  --terminal-bright: #ffd894;
+  --terminal-dim: #8f7345;
+  --terminal-faint: #57452a;
+  --terminal-ghost: #9a8f7c;
+  --terminal-code: rgba(255, 205, 130, 0.07);
+  --terminal-bloom: rgba(255, 196, 120, 0.3);
+  background: var(--terminal-bg);
+  color: var(--terminal-fg);
+  font-family:
+    var(--font-geist-mono), ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.terminal-app[data-theme='green'] {
+  --terminal-bg: #060b06;
+  --terminal-fg: #97d495;
+  --terminal-bright: #c9f2b8;
+  --terminal-dim: #557c4f;
+  --terminal-faint: #35502f;
+  --terminal-ghost: #7f8f7c;
+  --terminal-code: rgba(160, 255, 160, 0.06);
+  --terminal-bloom: rgba(140, 255, 150, 0.25);
+}
+
+.terminal-app[data-theme='mono'] {
+  --terminal-bg: #0b0b0b;
+  --terminal-fg: #cdcdcd;
+  --terminal-bright: #f4f4f4;
+  --terminal-dim: #7d7d7d;
+  --terminal-faint: #4b4b4b;
+  --terminal-ghost: #8f8f8f;
+  --terminal-code: rgba(255, 255, 255, 0.05);
+  --terminal-bloom: rgba(255, 255, 255, 0.22);
+}
+
+.terminal-app * {
+  box-sizing: border-box;
+}
+
 .terminal-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
 }
 .terminal-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 .terminal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 176, 0, 0.2);
-  border-radius: 3px;
+  background: var(--terminal-faint);
+  border: 3px solid var(--terminal-bg);
+  border-radius: 6px;
 }
 .terminal-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 176, 0, 0.4);
+  background: var(--terminal-dim);
+}
+
+.terminal-scroll {
+  padding: 26px 0 12px;
+}
+
+.terminal-scroll > * {
+  max-width: 96ch;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 26px;
+  padding-right: 26px;
+}
+
+.terminal-output {
+  white-space: pre-wrap;
+  word-break: break-word;
+  animation: terminal-line-in 180ms ease-out both;
+}
+
+.terminal-output[data-type='banner'] {
+  color: var(--terminal-bright) !important;
+  font-weight: 700;
+  line-height: 1.25;
+  text-shadow: 0 0 1.4px var(--terminal-bloom);
+}
+
+.terminal-output[data-type='input'] {
+  color: var(--terminal-bright) !important;
+}
+
+.terminal-prompt {
+  min-height: 1.6em;
+  color: var(--terminal-fg);
+}
+
+.terminal-crt-roll {
+  height: 22%;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    rgba(255, 255, 255, 0.03) 45%,
+    rgba(255, 255, 255, 0.03) 55%,
+    transparent
+  );
+  animation: terminal-roll 8s linear infinite;
+}
+
+@keyframes terminal-roll {
+  from {
+    transform: translateY(-30vh);
+  }
+  to {
+    transform: translateY(130vh);
+  }
+}
+
+.terminal-status {
+  display: none;
 }
 
 .terminal-output {
@@ -60,7 +163,9 @@ body {
   border: 1px solid var(--skills-border);
   border-radius: 10px;
   background: var(--skills-bg);
-  box-shadow: inset 0 0 0 1px var(--skills-ghost), 0 0 18px var(--skills-ghost);
+  box-shadow:
+    inset 0 0 0 1px var(--skills-ghost),
+    0 0 18px var(--skills-ghost);
 }
 
 .skills-section,
@@ -95,7 +200,9 @@ body {
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
-  transition: transform 160ms ease, background-color 160ms ease;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease;
 }
 
 .skills-language-pill:hover {
@@ -121,19 +228,39 @@ body {
 }
 
 @keyframes terminal-line-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes skills-panel-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.99); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @media (max-width: 640px) {
+  .terminal-app {
+    font-size: 13px;
+  }
+
   .terminal-scroll {
-    padding: 10px;
-    font-size: 12px;
+    padding-top: 16px;
+  }
+
+  .terminal-scroll > * {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .skills-panel {
@@ -149,6 +276,16 @@ body {
     font-size: 10px;
     min-height: 26px;
     padding-inline: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .terminal-output {
+    animation: none;
+  }
+
+  .terminal-crt-roll {
+    display: none;
   }
 }
 

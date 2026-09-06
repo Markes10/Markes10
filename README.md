@@ -1,6 +1,6 @@
 [![Launch Interactive CLI](https://img.shields.io/badge/▶_LAUNCH-Interactive_CLI_Portfolio-10B981?style=for-the-badge&logo=gnu-bash&logoColor=white)](https://markes10.github.io/Markes10/) 
 
-My TRAGES is 
+My TRAGES are 
 All unique languages — 149 total
 
 ABAP

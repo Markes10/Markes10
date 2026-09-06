@@ -164,6 +164,7 @@ describe('terminal commands', () => {
     const ctx = createContext();
     const output = executeCommand('crt', ctx);
     expect(output.length).toBeGreaterThan(0);
+    expect(output[0]?.content).toContain('always on');
   });
 
   it('toggles key sounds', () => {

@@ -601,9 +601,6 @@
   .z-30 {
     z-index: 30;
   }
-  .z-40 {
-    z-index: 40;
-  }
   .z-50 {
     z-index: 50;
   }
@@ -838,14 +835,8 @@
   .h-\[16px\] {
     height: 16px;
   }
-  .h-\[36px\] {
-    height: 36px;
-  }
   .h-\[calc\(100\%-1px\)\] {
     height: calc(100% - 1px);
-  }
-  .h-\[calc\(100vh-36px\)\] {
-    height: calc(100vh - 36px);
   }
   .h-\[var\(--radix-navigation-menu-viewport-height\)\] {
     height: var(--radix-navigation-menu-viewport-height);
@@ -1505,9 +1496,6 @@
   .text-\[0\.8rem\] {
     font-size: 0.8rem;
   }
-  .text-\[10px\] {
-    font-size: 10px;
-  }
   .leading-none {
     --tw-leading: 1;
     line-height: 1;
@@ -1531,10 +1519,6 @@
   .tracking-tight {
     --tw-tracking: var(--tracking-tight);
     letter-spacing: var(--tracking-tight);
-  }
-  .tracking-wide {
-    --tw-tracking: var(--tracking-wide);
-    letter-spacing: var(--tracking-wide);
   }
   .tracking-widest {
     --tw-tracking: var(--tracking-widest);
@@ -1590,9 +1574,6 @@
   }
   .text-white {
     color: var(--color-white);
-  }
-  .uppercase {
-    text-transform: uppercase;
   }
   .italic {
     font-style: italic;
@@ -3130,6 +3111,8 @@ body {
   background: var(--terminal-dim);
 }
 .terminal-scroll {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 26px 0 12px;
 }
 .terminal-scroll > * {
@@ -3165,11 +3148,28 @@ body {
 }
 .terminal-output[data-type='banner'] {
   letter-spacing: 0.08em;
-  animation: 0.9s steps(5, end) both terminal-banner-in;
+  max-width: 100%;
+  animation: 0.9s steps(4, end) both terminal-crtin;
+  overflow: hidden;
+  font-size: clamp(11px, 2.1vw, 17px) !important;
 }
 .terminal-prompt {
   min-height: 1.6em;
   color: var(--terminal-fg);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  min-width: 0;
+  max-width: 100%;
+}
+.terminal-cursor {
+  animation: 1.06s linear infinite blink;
+}
+.terminal-cursor.double {
+  animation: 0.5s linear infinite blink2;
+}
+.terminal-ghost {
+  white-space: pre;
+  animation: 0.5s linear gflick;
 }
 .terminal-bottom {
   width: min(100%, 96ch);
@@ -3190,22 +3190,69 @@ body {
     transform: translateY(130vh);
   }
 }
-@keyframes terminal-banner-in {
+@keyframes blink {
+  0%,
+  51.9% {
+    opacity: 1;
+  }
+  52%,
+  to {
+    opacity: 0;
+  }
+}
+@keyframes blink2 {
+  0%,
+  44% {
+    opacity: 1;
+  }
+  45%,
+  74% {
+    opacity: 0;
+  }
+  75%,
+  to {
+    opacity: 1;
+  }
+}
+@keyframes gflick {
+  0%,
+  to {
+    opacity: 1;
+  }
+  12% {
+    opacity: 0.05;
+  }
+  28% {
+    opacity: 0.85;
+  }
+  46% {
+    opacity: 0.2;
+  }
+  64% {
+    opacity: 0.7;
+  }
+  82% {
+    opacity: 0.35;
+  }
+}
+@keyframes terminal-crtin {
   0% {
     opacity: 0;
-    filter: blur(3px);
-    transform: translateY(8px);
   }
-  55% {
-    opacity: 0.65;
-    filter: blur();
+  25% {
+    opacity: 0.35;
   }
-  72% {
-    opacity: 0.25;
+  40% {
+    opacity: 0.08;
+  }
+  60% {
+    opacity: 0.75;
+  }
+  80% {
+    opacity: 0.3;
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 .terminal-status {
@@ -3311,6 +3358,17 @@ body {
   .terminal-scroll {
     padding-top: 16px;
   }
+  .terminal-scroll > * {
+    max-width: 100%;
+  }
+  .terminal-output[data-type='html'] {
+    overflow-wrap: anywhere;
+    font-size: 11px !important;
+  }
+  .terminal-output[data-type='banner'] {
+    letter-spacing: 0;
+    line-height: 1;
+  }
   .terminal-bottom,
   .terminal-scroll > * {
     padding-left: 14px;
@@ -3336,17 +3394,10 @@ body {
   .terminal-crt-roll {
     display: none;
   }
-  .terminal-output[data-type='banner'] {
+  .terminal-output[data-type='banner'],
+  .terminal-ghost,
+  .terminal-cursor {
     animation: none;
-  }
-}
-@keyframes blink {
-  0%,
-  to {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
   }
 }
 @property --tw-translate-x {

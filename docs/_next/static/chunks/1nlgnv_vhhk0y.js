@@ -1899,18 +1899,9 @@ B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
         if (e[i].toLowerCase() === n) return e[i + 1];
     }
     function ed(e, t) {
-      let n = t.crtOn ?? !0,
-        i = e[0]?.toLowerCase(),
-        o = 'on' === i || ('off' !== i && !n);
       return (
-        t.setCrt(o),
-        [
-          {
-            id: v(),
-            content: `crt: ${o ? 'enabled' : 'disabled'}`,
-            type: 'output',
-          },
-        ]
+        t.setCrt(!0),
+        [{ id: v(), content: 'crt: enabled (always on)', type: 'output' }]
       );
     }
     function eu(e, t) {
@@ -2592,6 +2583,11 @@ B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
                   className: 'pointer-events-none absolute inset-0 z-10',
                   style: { backgroundColor: eA.crtGlow },
                 }),
+              a &&
+                (0, t.jsx)('div', {
+                  className:
+                    'terminal-crt-roll pointer-events-none absolute inset-x-0 top-0 z-30',
+                }),
               (0, t.jsxs)('div', {
                 ref: ep,
                 className:
@@ -2682,13 +2678,18 @@ B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
                       }),
                       (0, t.jsx)('span', { children: d }),
                       eI &&
-                        (0, t.jsx)('span', {
-                          style: { color: eA.textGhost },
-                          children: eI,
-                        }),
+                        (0, t.jsx)(
+                          'span',
+                          {
+                            className: 'terminal-ghost',
+                            style: { color: eA.textGhost },
+                            children: eI,
+                          },
+                          eI,
+                        ),
                       (0, t.jsx)('span', {
                         className:
-                          'inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0',
+                          'terminal-cursor inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0',
                         style: {
                           backgroundColor: et ? eA.text : 'transparent',
                           transition: 'background-color 0.1s',

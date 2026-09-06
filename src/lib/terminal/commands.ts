@@ -1637,15 +1637,11 @@ function parseOptional(
 }
 
 function cmdCrt(_args: string[], ctx: CommandContext): OutputLine[] {
-  const current = (ctx as unknown as { crtOn: boolean }).crtOn ?? true;
-  const requested = _args[0]?.toLowerCase();
-  const newVal =
-    requested === 'on' ? true : requested === 'off' ? false : !current;
-  ctx.setCrt(newVal);
+  ctx.setCrt(true);
   return [
     {
       id: uid(),
-      content: `crt: ${newVal ? 'enabled' : 'disabled'}`,
+      content: 'crt: enabled (always on)',
       type: 'output',
     },
   ];

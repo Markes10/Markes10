@@ -5,7 +5,6 @@
 @theme inline {
   --font-mono: var(--font-geist-mono);
 }
-
 /* Reset everything for the terminal */
 *,
 *::before,
@@ -89,6 +88,8 @@ body {
 
 .terminal-scroll {
   padding: 26px 0 12px;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .terminal-scroll > * {
@@ -129,13 +130,33 @@ body {
 }
 
 .terminal-output[data-type='banner'] {
-  animation: terminal-banner-in 900ms steps(5, end) both;
+  animation: terminal-crtin 900ms steps(4) both;
   letter-spacing: 0.08em;
+  font-size: clamp(11px, 2.1vw, 17px) !important;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .terminal-prompt {
   min-height: 1.6em;
   color: var(--terminal-fg);
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.terminal-cursor {
+  animation: blink 1.06s linear infinite;
+}
+
+.terminal-cursor.double {
+  animation: blink2 0.5s linear infinite;
+}
+
+.terminal-ghost {
+  white-space: pre;
+  animation: gflick 0.5s linear;
 }
 
 .terminal-bottom {
@@ -166,22 +187,72 @@ body {
   }
 }
 
-@keyframes terminal-banner-in {
+@keyframes blink {
+  0%,
+  51.9% {
+    opacity: 1;
+  }
+  52%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes blink2 {
+  0%,
+  44% {
+    opacity: 1;
+  }
+  45%,
+  74% {
+    opacity: 0;
+  }
+  75%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes gflick {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  12% {
+    opacity: 0.05;
+  }
+  28% {
+    opacity: 0.85;
+  }
+  46% {
+    opacity: 0.2;
+  }
+  64% {
+    opacity: 0.7;
+  }
+  82% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes terminal-crtin {
   0% {
     opacity: 0;
-    transform: translateY(8px);
-    filter: blur(3px);
   }
-  55% {
-    opacity: 0.65;
-    filter: blur(0);
+  25% {
+    opacity: 0.35;
   }
-  72% {
-    opacity: 0.25;
+  40% {
+    opacity: 0.08;
+  }
+  60% {
+    opacity: 0.75;
+  }
+  80% {
+    opacity: 0.3;
   }
   100% {
     opacity: 1;
-    transform: translateY(0);
   }
 }
 
@@ -304,6 +375,20 @@ body {
     padding-top: 16px;
   }
 
+  .terminal-scroll > * {
+    max-width: 100%;
+  }
+
+  .terminal-output[data-type='html'] {
+    font-size: 11px !important;
+    overflow-wrap: anywhere;
+  }
+
+  .terminal-output[data-type='banner'] {
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
   .terminal-bottom {
     padding-left: 14px;
     padding-right: 14px;
@@ -339,18 +424,9 @@ body {
     display: none;
   }
 
-  .terminal-output[data-type='banner'] {
+  .terminal-output[data-type='banner'],
+  .terminal-ghost,
+  .terminal-cursor {
     animation: none;
-  }
-}
-
-/* Blink animation for boot cursor */
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
   }
 }

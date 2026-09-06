@@ -525,6 +525,10 @@ export default function Terminal() {
         />
       )}
 
+      {crtOn && (
+        <div className="terminal-crt-roll pointer-events-none absolute inset-x-0 top-0 z-30" />
+      )}
+
       {/* Terminal scrollable area */}
       <div
         ref={scrollRef}
@@ -606,10 +610,16 @@ export default function Terminal() {
             </span>
             <span>{input}</span>
             {ghostText && (
-              <span style={{ color: colors.textGhost }}>{ghostText}</span>
+              <span
+                key={ghostText}
+                className="terminal-ghost"
+                style={{ color: colors.textGhost }}
+              >
+                {ghostText}
+              </span>
             )}
             <span
-              className="inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0"
+              className="terminal-cursor inline-block w-[8px] h-[16px] align-text-bottom flex-shrink-0"
               style={{
                 backgroundColor: cursorVisible ? colors.text : 'transparent',
                 transition: 'background-color 0.1s',

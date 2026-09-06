@@ -97,7 +97,9 @@ describe('terminal commands', () => {
     });
 
     await expect(copyTextToClipboard('hello')).resolves.toBe(true);
-    await expect(pasteTextFromClipboard()).resolves.toBe('hello from clipboard');
+    await expect(pasteTextFromClipboard()).resolves.toBe(
+      'hello from clipboard',
+    );
   });
 
   it('lists skills', () => {
@@ -168,5 +170,25 @@ describe('terminal commands', () => {
     const ctx = createContext();
     const output = executeCommand('keys', ctx);
     expect(output.length).toBeGreaterThan(0);
+  });
+
+  it('supports the reference shell commands', () => {
+    const commands = [
+      'man ls',
+      'cowsay hello',
+      'cat .plan',
+      './blinkd',
+      'sudo make me a sandwich',
+    ];
+    for (const command of commands) {
+      const output = executeCommand(command, createContext());
+      expect(output.length).toBeGreaterThan(0);
+      expect(output.some(line => line.type === 'error')).toBe(false);
+    }
+  });
+
+  it('supports the mail command with a pre-filled client link', () => {
+    const output = executeCommand('mail hello@example.com', createContext());
+    expect(output.some(line => line.content.includes('mailto:'))).toBe(true);
   });
 });

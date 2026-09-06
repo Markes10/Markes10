@@ -126,10 +126,25 @@ export function executeCommand(
     neofetch: cmdNeofetch,
     history: cmdHistory,
     pwd: cmdPwd,
+    man: cmdMan,
+    mail: cmdMail,
+    cowsay: cmdCowsay,
+    open: cmdOpen,
+    sudo: cmdSudo,
+    exit: cmdExit,
+    logout: cmdExit,
+    vim: cmdEditor,
+    vi: cmdEditor,
+    emacs: cmdEditor,
+    nano: cmdEditor,
+    rm: cmdRm,
+    sound: cmdSound,
   };
 
   const handler = commands[cmd];
   if (handler) return handler(args, ctx);
+
+  if (cmd.startsWith('./')) return cmdRunProject(cmd.slice(2));
 
   return [
     {
@@ -141,6 +156,14 @@ export function executeCommand(
 }
 
 function cmdLs(args: string[], ctx: CommandContext): OutputLine[] {
+  if (args.includes('-a') && args.length === 1) {
+    return [
+      ...cmdLs([], ctx),
+      line('  .plan'),
+      line('  .secrets'),
+      line('  .zshrc'),
+    ];
+  }
   const target = args[0] ? resolvePath(ctx.cwd, args[0]) : ctx.cwd;
   const node = getNode(ctx.fs, target);
   if (!node)
@@ -195,8 +218,38 @@ function cmdCd(args: string[], ctx: CommandContext): OutputLine[] {
 function cmdCat(args: string[], ctx: CommandContext): OutputLine[] {
   if (!args[0])
     return [{ id: uid(), content: 'cat: missing file operand', type: 'error' }];
+  if (args[0] === 'feed.xml') {
+    return [
+      line('<?xml version="1.0" encoding="UTF-8"?>'),
+      line('<rss version="2.0"><channel>'),
+      line('  <title>Dweepan CLI</title>'),
+      line('  <description>plain text, strong opinions</description>'),
+      line('</channel></rss>'),
+    ];
+  }
   const resolved = resolvePath(ctx.cwd, args[0]);
   const node = getNode(ctx.fs, resolved);
+  if (!node)
+    if (['.plan', '.secrets', '.zshrc'].includes(args[0])) {
+      const hidden: Record<string, string[]> = {
+        '.plan': [
+          "dweepan's .plan — last updated: yesterday, roughly",
+          'currently: making the web smaller, one command at a time.',
+          'next: ship the next tiny improvement.',
+        ],
+        '.secrets': [
+          "# ~/.secrets — do not cat. (you cat'ed it. of course.)",
+          'api_key = "not actually a secret"',
+          'wifi_password = "please just use ethernet"',
+        ],
+        '.zshrc': [
+          '# ~/.zshrc — the essentials',
+          "alias please='sudo'",
+          'export EDITOR=vim',
+        ],
+      };
+      return hidden[args[0]].map(line);
+    }
   if (!node)
     return [
       {
@@ -302,6 +355,139 @@ function cmdPwd(_args: string[], ctx: CommandContext): OutputLine[] {
   return [{ id: uid(), content: ctx.cwd, type: 'output' }];
 }
 
+function cmdMan(args: string[]): OutputLine[] {
+  const pages: Record<string, string[]> = {
+    ls: [
+      'ls - list files and directories',
+      'usage: ls [path]',
+      'try: ls /projects',
+    ],
+    cat: [
+      'cat - display a file',
+      'usage: cat <file>',
+      'try: cat /about/summary.txt',
+    ],
+    cd: ['cd - change directory', 'usage: cd <path>'],
+    mail: [
+      'mail - compose a letter',
+      'usage: mail <address>',
+      'opens a pre-filled mail client link',
+    ],
+    theme: [
+      'theme - choose the terminal phosphor',
+      'usage: theme amber|green|mono',
+    ],
+    crt: ['crt - toggle scanlines and bloom', 'usage: crt on|off'],
+    sound: ['sound - toggle keypress clicks', 'usage: sound on|off'],
+    cowsay: ['cowsay - make a cow say something', 'usage: cowsay <message>'],
+    man: ['man - read a command manual', 'usage: man <command>'],
+  };
+  const name = args[0]?.toLowerCase();
+  if (!name)
+    return [
+      line('What manual page do you want?'),
+      line('try: man ls · man cat · man man'),
+    ];
+  return (pages[name] ?? [`No manual entry for ${name}`]).map(line);
+}
+
+function cmdMail(args: string[]): OutputLine[] {
+  const address = args[0] || 'dweepan.gain11dec99@gmail.com';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+    return [
+      error(`mail: '${address}' does not look like an address`),
+      line('usage: mail <address>'),
+    ];
+  }
+  const href = `mailto:${encodeURIComponent(address)}?subject=${encodeURIComponent('hello from the cli')}`;
+  return [
+    line(`composing to ${address}...`),
+    htmlLine(
+      `<a href="${href}">open your mail client</a> — pre-filled, no typos.`,
+    ),
+  ];
+}
+
+function cmdCowsay(args: string[]): OutputLine[] {
+  const message = args.join(' ') || 'moo. (pass a message: cowsay <text>)';
+  const width = Math.min(48, Math.max(8, message.length));
+  const top = ` ${'_'.repeat(width + 2)}`;
+  const middle = `< ${message.slice(0, width).padEnd(width)} >`;
+  const bottom = ` ${'-'.repeat(width + 2)}`;
+  return [
+    top,
+    middle,
+    bottom,
+    '        \\   ^__^',
+    '         \\  (oo)\\_______',
+    '            (__)\\       )\\/\\',
+    '                ||----w |',
+    '                ||     ||',
+  ].map(line);
+}
+
+function cmdOpen(args: string[], ctx: CommandContext): OutputLine[] {
+  const target = args[0];
+  if (!target)
+    return [error('open: missing file or project'), line('try: open <file>')];
+  if (target.startsWith('./'))
+    return [
+      line(
+        `open: ${target.slice(2)} is executable only through its project command`,
+      ),
+      ...cmdProjects([], ctx),
+    ];
+  return cmdCat([target], ctx);
+}
+
+function cmdSudo(args: string[]): OutputLine[] {
+  if (args.join(' ') === 'make me a sandwich') return [line('okay.')];
+  return [
+    error('guest is not in the sudoers file. this incident will be reported.'),
+    line('(reported to whom? exactly.)'),
+  ];
+}
+
+function cmdExit(): OutputLine[] {
+  return [
+    line('there is no exit. there is only the scrollback.'),
+    line('(close the tab if you must. the phosphor will fade.)'),
+  ];
+}
+
+function cmdEditor(args: string[]): OutputLine[] {
+  const editor = args.length ? args.join(' ') : 'editor';
+  return [
+    line(`${editor}: this is a blog, not a lifestyle.`),
+    line('(try cat /about/summary.txt for the sermon)'),
+  ];
+}
+
+function cmdRm(): OutputLine[] {
+  return [error('rm: read-only filesystem. also: no.')];
+}
+
+function cmdSound(args: string[], ctx: CommandContext): OutputLine[] {
+  const current = (ctx as unknown as { keysOn: boolean }).keysOn ?? false;
+  const requested = args[0]?.toLowerCase();
+  const next =
+    requested === 'on' ? true : requested === 'off' ? false : !current;
+  ctx.setKeys(next);
+  return [line(`sound: ${next ? 'on — enjoy the clacks' : 'off'}`)];
+}
+
+function line(content: string): OutputLine {
+  return { id: uid(), content, type: 'output' };
+}
+
+function htmlLine(content: string): OutputLine {
+  return { id: uid(), content, type: 'html' };
+}
+
+function error(content: string): OutputLine {
+  return { id: uid(), content, type: 'error' };
+}
+
 function cmdWhoami(_args: string[], ctx: CommandContext): OutputLine[] {
   if (typeof window === 'undefined') {
     return [
@@ -367,7 +553,11 @@ async function fetchGitHubLanguages(
     if (languages.length === 0) {
       appendOutput([
         { id: uid(), content: '', type: 'output' },
-        { id: uid(), content: '  No repository languages found.', type: 'output' },
+        {
+          id: uid(),
+          content: '  No repository languages found.',
+          type: 'output',
+        },
         { id: uid(), content: '', type: 'output' },
       ]);
       return;
@@ -1173,7 +1363,7 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
     </div>
 
   <div style="text-align:center;margin-top:16px;padding-top:10px;border-top:1px solid ${C.border};font-size:9px;color:${C.dim}">
-    Generated by RETROSHELL &middot; github.com/Markes10
+    Generated by DWEEPAN CLI &middot; github.com/Markes10
   </div>
 </div>`;
 }
@@ -1448,7 +1638,9 @@ function parseOptional(
 
 function cmdCrt(_args: string[], ctx: CommandContext): OutputLine[] {
   const current = (ctx as unknown as { crtOn: boolean }).crtOn ?? true;
-  const newVal = !current;
+  const requested = _args[0]?.toLowerCase();
+  const newVal =
+    requested === 'on' ? true : requested === 'off' ? false : !current;
   ctx.setCrt(newVal);
   return [
     {
@@ -1457,6 +1649,21 @@ function cmdCrt(_args: string[], ctx: CommandContext): OutputLine[] {
       type: 'output',
     },
   ];
+}
+
+function cmdRunProject(name: string): OutputLine[] {
+  const projects: Record<string, string> = {
+    blinkd: 'blinkd 1.06 — cursor timing daemon claimed the blink.',
+    'mdcat.js': 'mdcat.js 2.1 — markdown renderer ready, 0 dependencies.',
+    'phosphor.css': 'phosphor.css — CRT theme kit loaded.',
+    'tty-portfolio': 'tty-portfolio v1.06 — you are inside it right now. hi.',
+  };
+  return projects[name]
+    ? [
+        line(projects[name]),
+        line('done. every blink you see is billed to the daemon.'),
+      ]
+    : [error(`open: nothing called './${name}'`), line('try: ls projects')];
 }
 
 function cmdKeys(_args: string[], ctx: CommandContext): OutputLine[] {
@@ -1480,13 +1687,14 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
   const L = (t: string) => ({ id: uid(), content: t, type: 'output' as const });
   return [
     L(''),
-    L('  RETROSHELL -- COMMAND MANUAL'),
-    L('  ============================'),
+    L('  DWEEPAN CLI -- COMMAND MANUAL'),
+    L('  ============================='),
     L(''),
     L('  NAVIGATION'),
     L('    ls [path]           List directory contents'),
     L('    cd <path>           Change directory'),
     L('    cat <file>          Display file contents'),
+    L('    open <file>         Open a file or project'),
     L(''),
     L('  PORTFOLIO'),
     L('    whoami              Display profile with ASCII portrait'),
@@ -1498,6 +1706,7 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     L('    contact             Show contact information'),
     L('    resume              Show colorful resume + download'),
     L('    github [repo]       Show GitHub profile / repo README in terminal'),
+    L('    mail <address>      Open a pre-filled letter'),
     L(''),
     L('  SYSTEM'),
     L('    theme [name]         Quick-switch theme'),
@@ -1507,7 +1716,12 @@ function cmdHelp(_args: string[], _ctx: CommandContext): OutputLine[] {
     L('    theme info <name>    Show theme color values'),
     L(''),
     L('    crt                 Toggle CRT scanline effect'),
+    L('    sound              Toggle keypress click sound'),
     L('    keys                Toggle mechanical key click sound'),
+    L('    man <command>       Read a command manual'),
+    L('    date · echo         Print the date or repeat text'),
+    L('    neofetch · cowsay   Terminal classics'),
+    L('    sudo · exit · vim   Small shell easter eggs'),
     L('    clear               Clear terminal screen'),
     L('    help                Show this manual'),
     L(''),
@@ -1543,6 +1757,23 @@ const ALL_CMDS = [
   'help',
   'projects',
   'profile',
+  'open',
+  'mail',
+  'man',
+  'sound',
+  'date',
+  'echo',
+  'neofetch',
+  'cowsay',
+  'uptime',
+  'sudo',
+  'exit',
+  'logout',
+  'vim',
+  'vi',
+  'emacs',
+  'nano',
+  'rm',
 ];
 
 export function getTabCompletion(

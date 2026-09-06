@@ -2,10 +2,23 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { parseBody, requireWriteAuth, userPatchSchema } from '@/lib/api';
 
+export const dynamic = 'force-static';
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return [{ id: 'static' }];
+}
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (process.env.GITHUB_PAGES === 'true') {
+    return NextResponse.json(
+      { error: 'API unavailable on GitHub Pages' },
+      { status: 404 },
+    );
+  }
   const { id } = await params;
   const user = await db.user.findUnique({
     where: { id },

@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { parseBody, requireWriteAuth, userCreateSchema } from '@/lib/api';
 
+export const dynamic = 'force-static';
+
 export async function GET() {
+  if (process.env.GITHUB_PAGES === 'true') return NextResponse.json([]);
+
   const users = await db.user.findMany({
     include: { posts: true },
     orderBy: { createdAt: 'desc' },

@@ -31,13 +31,27 @@ const BOOT_LINES = [
   { text: '', delay: 3700 },
 ];
 
-const BANNER = `
-████  █  █  ████  █████  ██████  ██████  ██████  ████  █
-█  █  █  █  █       █    █       █       █       █  █  █
-████  █  █  ████    █    ████    ████    ████    ████  █
-█     █  █     █    █    █       █       █       █ █   █
-█     ████  ████    █    █████   █       █████   █  █  █
-`;
+const PORTFOLIO_GLYPHS: Record<string, string[]> = {
+  P: ['████', '█  █', '████', '█   ', '█   '],
+  O: ['████', '█  █', '█  █', '█  █', '████'],
+  R: ['████', '█  █', '████', '█ █ ', '█  █'],
+  T: ['█████', '  █  ', '  █  ', '  █  ', '  █  '],
+  F: ['████', '█   ', '███ ', '█   ', '█   '],
+  L: ['█   ', '█   ', '█   ', '█   ', '████'],
+  I: ['███', ' █ ', ' █ ', ' █ ', '███'],
+};
+
+const BANNER = 'PORTFOLIO'
+  .split('')
+  .reduce(
+    (rows, letter, index) =>
+      rows.map(
+        (row, rowIndex) =>
+          `${row}${index ? ' ' : ''}${PORTFOLIO_GLYPHS[letter][rowIndex]}`,
+      ),
+    ['', '', '', '', ''],
+  )
+  .join('\n');
 
 // Mechanical key click via Web Audio
 let audioCtx: AudioContext | null = null;
@@ -252,7 +266,7 @@ export default function Terminal() {
       // Ctrl+C
       if (e.key === 'c' && e.ctrlKey) {
         e.preventDefault();
-        const promptStr = 'guest@phosphor:~$ ';
+        const promptStr = 'Dweepan@cli: ~& ';
         setOutput(prev => [
           ...prev,
           {
@@ -288,7 +302,7 @@ export default function Terminal() {
         const trimmed = s.input.trim();
         if (!trimmed) return;
 
-        const promptStr = 'guest@phosphor:~$ ';
+        const promptStr = 'Dweepan@cli: ~& ';
         const newOutput: OutputLine[] = [
           ...s.output,
           {
@@ -466,7 +480,7 @@ export default function Terminal() {
     return getGhostText(input, cwd, fileSystem);
   }, [input, cwd, bootDone]);
 
-  const promptStr = 'guest@phosphor:~$ ';
+  const promptStr = 'Dweepan@cli: ~& ';
 
   return (
     <div
@@ -543,6 +557,7 @@ export default function Terminal() {
               key={line.id}
               className="terminal-output whitespace-pre-wrap break-all select-text"
               data-type={line.type}
+              aria-label={line.type === 'banner' ? 'PORTFOLIO' : undefined}
               style={{
                 color:
                   line.type === 'error'
@@ -555,9 +570,9 @@ export default function Terminal() {
                           ? colors.textDim
                           : colors.text,
                 fontWeight: line.type === 'banner' ? 'bold' : 'normal',
-                fontSize: line.type === 'banner' ? '11px' : undefined,
-                lineHeight: line.type === 'banner' ? '1.1' : undefined,
-                letterSpacing: line.type === 'banner' ? '0.5px' : undefined,
+                fontSize: line.type === 'banner' ? '17px' : undefined,
+                lineHeight: line.type === 'banner' ? '1.08' : undefined,
+                letterSpacing: line.type === 'banner' ? '0.2px' : undefined,
               }}
               onMouseUp={() => {
                 const selection = window.getSelection()?.toString();
@@ -569,8 +584,22 @@ export default function Terminal() {
           ),
         )}
 
-        {/* Input line */}
-        {bootDone && (
+        {/* Boot cursor */}
+        {isBooting && (
+          <div className="flex items-center">
+            <span
+              className="inline-block w-[8px] h-[16px]"
+              style={{
+                backgroundColor: cursorVisible ? colors.text : 'transparent',
+                animation: 'blink 1.06s step-end infinite',
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {bootDone && (
+        <div className="terminal-bottom relative z-10">
           <div className="terminal-prompt flex whitespace-pre">
             <span style={{ color: colors.prompt, fontWeight: 'bold' }}>
               {promptStr}
@@ -587,21 +616,8 @@ export default function Terminal() {
               }}
             />
           </div>
-        )}
-
-        {/* Boot cursor */}
-        {isBooting && (
-          <div className="flex items-center">
-            <span
-              className="inline-block w-[8px] h-[16px]"
-              style={{
-                backgroundColor: cursorVisible ? colors.text : 'transparent',
-                animation: 'blink 1.06s step-end infinite',
-              }}
-            />
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

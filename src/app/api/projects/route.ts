@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { parseBody, projectCreateSchema, requireWriteAuth } from '@/lib/api';
 
+export const dynamic = 'force-static';
+
 export async function GET() {
+  if (process.env.GITHUB_PAGES === 'true') return NextResponse.json([]);
+
   const projects = await db.project.findMany({
     orderBy: { createdAt: 'desc' },
   });

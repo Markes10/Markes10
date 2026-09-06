@@ -1,5 +1,5 @@
 /**
- * RETROSHELL Theme Registry
+ * DWEEPAN CLI Theme Registry
  *
  * Manages built-in and user-created color themes.
  * Built-in themes cannot be deleted. Custom themes are

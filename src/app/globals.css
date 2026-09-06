@@ -34,6 +34,7 @@ body {
   --terminal-ghost: #9a8f7c;
   --terminal-code: rgba(255, 205, 130, 0.07);
   --terminal-bloom: rgba(255, 196, 120, 0.3);
+  --terminal-accent: #8bd3c7;
   background: var(--terminal-bg);
   color: var(--terminal-fg);
   font-family:
@@ -52,6 +53,7 @@ body {
   --terminal-ghost: #7f8f7c;
   --terminal-code: rgba(160, 255, 160, 0.06);
   --terminal-bloom: rgba(140, 255, 150, 0.25);
+  --terminal-accent: #a7e8a1;
 }
 
 .terminal-app[data-theme='mono'] {
@@ -63,6 +65,7 @@ body {
   --terminal-ghost: #8f8f8f;
   --terminal-code: rgba(255, 255, 255, 0.05);
   --terminal-bloom: rgba(255, 255, 255, 0.22);
+  --terminal-accent: #b9d7d1;
 }
 
 .terminal-app * {
@@ -113,9 +116,33 @@ body {
   color: var(--terminal-bright) !important;
 }
 
+.terminal-output[data-type='error'] {
+  background: var(--terminal-fg);
+  color: var(--terminal-bg) !important;
+  padding-inline: 6px;
+  font-weight: 700;
+}
+
+.terminal-output[data-type='html'] a,
+.terminal-prompt {
+  color: var(--terminal-accent);
+}
+
+.terminal-output[data-type='banner'] {
+  animation: terminal-banner-in 900ms steps(5, end) both;
+  letter-spacing: 0.08em;
+}
+
 .terminal-prompt {
   min-height: 1.6em;
   color: var(--terminal-fg);
+}
+
+.terminal-bottom {
+  flex: none;
+  width: min(100%, 96ch);
+  margin: 0 auto;
+  padding: 8px 26px max(16px, env(safe-area-inset-bottom));
 }
 
 .terminal-crt-roll {
@@ -136,6 +163,25 @@ body {
   }
   to {
     transform: translateY(130vh);
+  }
+}
+
+@keyframes terminal-banner-in {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(3px);
+  }
+  55% {
+    opacity: 0.65;
+    filter: blur(0);
+  }
+  72% {
+    opacity: 0.25;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -258,6 +304,11 @@ body {
     padding-top: 16px;
   }
 
+  .terminal-bottom {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
   .terminal-scroll > * {
     padding-left: 14px;
     padding-right: 14px;
@@ -286,6 +337,10 @@ body {
 
   .terminal-crt-roll {
     display: none;
+  }
+
+  .terminal-output[data-type='banner'] {
+    animation: none;
   }
 }
 

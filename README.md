@@ -285,7 +285,6 @@ Wolfram Language
 
 XQuery
 
-XSLT
-YAML
+XSLT 
+
 YARA
-q

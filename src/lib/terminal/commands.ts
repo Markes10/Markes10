@@ -82,8 +82,9 @@ export function getResumeSkillCategories(): Array<[string, string]> {
       if (idx === -1) return null;
       const key = line.slice(0, idx).trim();
       const value = line.slice(idx + 1).trim();
-      if (!key || !value) return null;
-      return [key, value] as [string, string];
+      const normalizedKey = key === 'Programming Languages' ? 'Languages' : key;
+      if (!normalizedKey || !value) return null;
+      return [normalizedKey, value] as [string, string];
     })
     .filter((entry): entry is [string, string] => entry !== null);
 }
@@ -1273,73 +1274,107 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
         <span style="color:${C.amber}">&#9679;</span> Vasco Da Gama, Goa, India &nbsp;&nbsp;
         <span style="color:${C.amber}">&#9679;</span> +91 8485841623<br/>
         <span style="color:${C.amber}">&#9679;</span> dweepangain11dec99@gmail.com<br/>
+        <span style="color:${C.amber}">&#9679;</span> LinkedIn: linkedin.com/in/dweepan-gain-b32594175<br/>
         <span style="color:${C.amber}">&#9679;</span> github.com/Markes10
       </div>
     </div>
   </div>
 
   <div style="font-size:10px;color:${C.white};line-height:1.65;padding:6px 0">
-    Results-driven AI/ML Engineer specializing in production-grade intelligent systems.
-    Deep expertise in LLMs, NLP, and machine learning with strong full-stack
-    development foundation. Building end-to-end solutions bridging research
-    and real-world business impact.
+    Computer Science engineer with hands-on experience across full-stack development,
+    machine learning, and data-driven AI systems. Skilled in LLM integration,
+    agentic AI, prompt engineering, and NLP-powered applications, with demonstrated
+    ability to build end-to-end web applications, predictive models, and automation
+    workflows using React, FastAPI, Python, and LangChain.
   </div>
 
   ${sec('&#128187;', 'EXPERIENCE', C.blue)}
-  ${expBlock('AI/ML Engineer', 'Labmentix', 'Jan 2024 - Present', C.blue, [
-    'Architected AI-powered CRM + PIM platform for enterprise clients with LLM-based extraction',
-    'Built ML pipelines reducing manual data entry by 60% across client operations',
-    'Led prompt engineering initiatives improving extraction accuracy to 94%',
-    'Designed RESTful APIs handling 10K+ daily requests with sub-200ms response times',
-  ])}
   ${expBlock(
-    'Software Developer',
-    'Demerg Systems',
-    'Jun 2023 - Dec 2023',
-    C.green,
+    'AI/ML Intern',
+    'Labmentix Pvt. Ltd.',
+    'Oct 2025 - Apr 2026',
+    C.blue,
     [
-      'Developed full-stack B2B SaaS applications using React, Node.js, and PostgreSQL',
-      'Implemented real-time data sync via WebSockets, reducing latency by 40%',
-      'Optimized database queries improving API throughput by 3x under high concurrency',
+      'Worked on AI/ML research and development projects covering model training, evaluation, and deployment',
+      'Applied supervised and unsupervised learning techniques to real-world datasets and production-grade AI pipelines',
+      'Collaborated with cross-functional teams to integrate ML models into scalable software systems',
     ],
   )}
-  ${expBlock('AI/ML Intern', 'JYESTA', 'Jan 2023 - May 2023', C.purple, [
-    'Built AI email assistant using OpenAI GPT APIs and Python with NLP classification',
-    'Achieved 89% accuracy on email classification models for domain-specific routing',
-  ])}
   ${expBlock(
-    'Web Dev Intern',
-    'Tentwenty Digital',
-    'Aug 2022 - Dec 2022',
+    'Full Stack Developer',
+    'Demerg Systems India',
+    'Jul 2025 - Sep 2025',
+    C.green,
+    [
+      'Completed an 8-week in-plant training in full-stack development with professional software standards',
+      'Delivered assigned tasks on schedule while following industry-standard development practices',
+    ],
+  )}
+  ${expBlock(
+    'Machine Learning Intern',
+    'JYESTA Corporate Entity',
+    'Jul 2025 - Sep 2025',
+    C.purple,
+    [
+      'Completed certified training in supervised and unsupervised learning, data preprocessing, regression, and classification',
+      'Applied machine learning algorithms in Python to real-world datasets and evaluated predictive models',
+    ],
+  )}
+  ${expBlock(
+    'Frontend Developer Intern',
+    'Tentwenty Digital LLP',
+    'Aug 2022 - Oct 2022',
     C.cyan,
     [
-      'Built responsive React websites with animated UI components using Framer Motion',
-      'Optimized site performance achieving Lighthouse scores above 90',
+      'Built responsive web interfaces using HTML, CSS, and JavaScript in a professional development environment',
+      'Received recognition for initiative and creative problem-solving in frontend development',
     ],
   )}
 
   ${sec('&#128736;', 'PROJECTS', C.accent)}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
-    ${projCard('AI CRM + PIM', 'Python, FastAPI, React, GPT-4, LangChain', C.blue)}
-    ${projCard('AI Email Assistant', 'Python, GPT-4, NLP, SpaCy', C.green)}
-    ${projCard('Resume Analyzer', 'Python, NLP, scikit-learn', C.purple)}
-    ${projCard('Fraud Detection', 'XGBoost, Random Forest, Flask', C.red)}
-    ${projCard('Medical Report Analyzer', 'OCR, NLP, FastAPI, React', C.cyan)}
-    ${projCard('Secure Chat App', 'React, Socket.IO, AES-256', C.amber)}
-    ${projCard('Social Media Monitor', 'NLP, VADER, Elasticsearch', C.green)}
+    ${projCard('AI CRM + PIM', 'FastAPI, React, Vite, Python, NLP, AI Agents', C.blue)}
+    ${projCard('AI Resume Analyzer', 'FastAPI, React, TypeScript, Python, NLP', C.green)}
+    ${projCard('Fraud Detection', 'Python, ML, Deep Learning, XAI', C.red)}
+    ${projCard('AI Email Assistant', 'Python, FastAPI, LangChain, NLP', C.purple)}
+    ${projCard('Medical Report Analyzer', 'Python, OCR, NLP, FastAPI, JWT', C.cyan)}
+    ${projCard('Secure Chat App', 'JavaScript, Socket.io, AES + RSA', C.amber)}
+    ${projCard('Social Media Monitor', 'Python, NLP, Data Visualization, APIs', C.green)}
+    ${projCard('AI Council', 'Python, FastAPI, React, Ollama, RAG', C.blue)}
   </div>
 
   ${sec('&#128218;', 'SKILLS', C.green)}
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:10px">
     ${[
-      ['Languages', 'Python, JavaScript, TypeScript, SQL, Bash, C++'],
-      ['AI / LLM', 'GPT-4, LangChain, Prompt Eng, Fine-Tuning, RAG'],
-      ['ML', 'Scikit-learn, XGBoost, Neural Networks, Feature Eng'],
-      ['Frontend', 'React, Next.js, Tailwind CSS, Framer Motion'],
-      ['Backend', 'Node.js, Express, FastAPI, Flask, WebSockets'],
-      ['Cloud', 'AWS, Docker, CI/CD, Git, GitHub Actions'],
-      ['Databases', 'PostgreSQL, MongoDB, Redis, Elasticsearch'],
-      ['Data Science', 'Pandas, NumPy, Matplotlib, EDA, A/B Testing'],
+      [
+        'Programming',
+        'Python, JavaScript, TypeScript, Java, C, C++, PHP, R, Rust, Kotlin',
+      ],
+      [
+        'AI / LLM',
+        'LangChain, Prompt Engineering, Agentic AI, LLM Integration, Hugging Face, NLP',
+      ],
+      [
+        'Machine Learning',
+        'Scikit-learn, TensorFlow, PyTorch, Deep Learning, Classification, Regression',
+      ],
+      [
+        'Data & Analytics',
+        'SQL, EDA, Data Cleaning, Feature Engineering, NumPy, Pandas, OpenCV',
+      ],
+      [
+        'Web Development',
+        'React, FastAPI, Node.js, Socket.io, Laravel, Streamlit, Tailwind CSS',
+      ],
+      [
+        'Databases & Cloud',
+        'MySQL, Snowflake, Git, Docker, CI/CD, Azure, Firebase, Prometheus',
+      ],
+      ['Formal Methods', 'Coq, Lean, F*, Dafny, TLA+, GAP'],
+      [
+        'Security / Systems',
+        'YARA, OPA, CodeQL, CIRCOM, Q#, LLVM IR, MLIR, CUDA',
+      ],
     ]
       .map(
         ([cat, sk]) =>
@@ -1350,17 +1385,19 @@ function buildColorfulResumeHTML(asciiPhoto: string): string {
 
   ${sec('&#127891;', 'EDUCATION', C.purple)}
   <div style="padding:8px 12px;border-left:3px solid ${C.purple};background:${C.card};border-radius:0 6px 6px 0">
-    <div style="color:${C.amber};font-weight:bold;font-size:12px">B.E. Computer Engineering</div>
-    <div style="color:${C.dim};font-size:10px;margin-top:2px">Goa College of Engineering, Farmagudi, Goa &middot; 2019 - 2023</div>
+    <div style="color:${C.amber};font-weight:bold;font-size:12px">B.E. Computer Science</div>
+    <div style="color:${C.dim};font-size:10px;margin-top:2px">Agnel Institute of Technology and Design &middot; 2023 - 2026</div>
     <div style="color:${C.white};font-size:9px;margin-top:4px;line-height:1.5">
-      Data Structures & Algorithms, Machine Learning, Deep Learning,
-      Database Management, Operating Systems, Software Engineering
+      Computer Science fundamentals, software engineering, ML workflows, and full-stack development
     </div>
   </div>
   <div style="margin-top:10px;padding:8px 12px;border-left:3px solid ${C.cyan};background:${C.card};border-radius:0 6px 6px 0">
-    <div style="color:${C.amber};font-weight:bold;font-size:11px">Certifications</div>
-    ${['Deep Learning Specialization - Coursera (Andrew Ng)', 'AWS Cloud Practitioner', 'NLP Specialization - Coursera'].map(c => `<div style="color:${C.white};font-size:9px;margin-top:3px;padding-left:10px;position:relative"><span style="position:absolute;left:0;color:${C.cyan}">&#9656;</span>${c}</div>`).join('')}
+    <div style="color:${C.amber};font-weight:bold;font-size:11px">Diploma in Computer Science & Engineering</div>
+    <div style="color:${C.dim};font-size:10px;margin-top:2px">Government Polytechnic, Panaji &middot; 2021 - 2024 &middot; Result: 67.75%</div>
+    <div style="color:${C.white};font-size:9px;margin-top:4px;line-height:1.5">
+      Secondary (Class X): Kendriya Vidyalaya No. 1, Vasco Da Gama, Goa &middot; 2017 &middot; Result: 76.00%
     </div>
+  </div>
 
   <div style="text-align:center;margin-top:16px;padding-top:10px;border-top:1px solid ${C.border};font-size:9px;color:${C.dim}">
     Generated by DWEEPAN CLI &middot; github.com/Markes10
@@ -1374,67 +1411,91 @@ function buildResumeText(): string {
         DWEEPAN GAIN -- RESUME
 ========================================
 
-AI/ML Engineer | Vasco Da Gama, Goa, India
+DWEEPAN GAIN | Vasco Da Gama, Goa, India
 Email: dweepangain11dec99@gmail.com
 Phone: +91 8485841623
+LinkedIn: linkedin.com/in/dweepan-gain-b32594175
 GitHub: https://github.com/Markes10
 
 ----------------------------------------
 PROFESSIONAL SUMMARY
 ----------------------------------------
-Results-driven AI/ML Engineer specializing in production-grade intelligent systems.
-Deep expertise in LLMs, NLP, and machine learning with strong full-stack development
-foundation. Building end-to-end solutions bridging research and real-world impact.
+Computer Science engineer with hands-on experience across full-stack development,
+machine learning, and data-driven AI systems. Skilled in LLM integration,
+agentic AI, prompt engineering, and NLP-powered applications, with working
+experience in SQL-based analysis, data visualization, and exploratory data analysis.
+Proven ability to build end-to-end web applications, predictive models, and
+automation workflows using React, FastAPI, Python, and LangChain, backed by
+four internships and seven self-driven projects.
 
 ----------------------------------------
 EXPERIENCE
 ----------------------------------------
 
-AI/ML Engineer -- Labmentix (Jan 2024 - Present)
-- Architected AI-powered CRM + PIM platform for enterprise clients
-- Built ML pipelines reducing manual data entry by 60%
-- Led prompt engineering improving extraction accuracy to 94%
+AI/ML Intern -- Labmentix Pvt. Ltd. (Oct 2025 - Apr 2026)
+- Worked on AI/ML research and development projects covering model training,
+  evaluation, and deployment.
+- Applied supervised and unsupervised learning techniques to real-world datasets.
+- Collaborated with cross-functional teams to integrate ML models into scalable
+  software systems.
 
-Software Developer -- Demerg Systems (Jun 2023 - Dec 2023)
-- Developed full-stack B2B SaaS applications with React, Node.js
-- Implemented real-time data sync reducing latency by 40%
-- Optimized database performance improving throughput by 3x
+Full Stack Developer -- Demerg Systems India (Jul 2025 - Sep 2025)
+- Completed an 8-week in-plant training in full-stack development focused on
+  professional software standards.
+- Followed industry-standard development practices and delivered assigned tasks
+  on schedule.
 
-AI/ML Intern -- JYESTA (Jan 2023 - May 2023)
-- Built AI email assistant with GPT APIs and NLP
-- Achieved 89% accuracy on email classification models
+Machine Learning Intern -- JYESTA Corporate Entity (Jul 2025 - Sep 2025)
+- Completed training in supervised and unsupervised learning, data
+  preprocessing, regression, and classification.
+- Applied machine learning algorithms in Python to real-world datasets and
+  evaluated predictive models against standard metrics.
 
-Web Dev Intern -- Tentwenty Digital (Aug 2022 - Dec 2022)
-- Built responsive React websites improving engagement by 25%
-- Achieved Lighthouse scores above 90
+Frontend Developer Intern -- Tentwenty Digital LLP (Aug 2022 - Oct 2022)
+- Built responsive web interfaces using HTML, CSS, and JavaScript.
+- Recognized by management for initiative and creative problem-solving.
 
 ----------------------------------------
 PROJECTS
 ----------------------------------------
-- AI CRM + PIM Platform (Python, FastAPI, React, GPT-4, LangChain)
-- AI Email Assistant (Python, GPT-4, NLP, SpaCy)
-- AI-Powered Resume Analyzer (Python, NLP, scikit-learn)
-- Fraud Detection System (XGBoost, Random Forest, Flask, Docker)
-- Medical Report Analyzer (OCR, NLP, FastAPI, React)
-- Secure Chat Application (React, Socket.IO, AES-256)
-- Social Media Monitoring Tool (NLP, VADER, Elasticsearch)
+- AI CRM + PIM Platform (2025 - 2026) | FastAPI, React, Vite, Python, NLP, AI Agents
+- AI-Powered Resume Analyzer (Jul 2025 - Sep 2025) | FastAPI, React, TypeScript, Python, NLP, JWT
+- Fraud Detection System (Apr 2025 - Jun 2025) | Python, Machine Learning, Deep Learning
+- AI Email Assistant (Jan 2025 - Mar 2025) | Python, FastAPI, React, LangChain, NLP
+- Medical Report Analyzer (Jan 2025 - Mar 2025) | Python, Machine Learning, NLP, OCR, FastAPI, JWT
+- Secure Chat Application (Jan 2025 - Mar 2025) | JavaScript, Socket.io, JWT, AES + RSA, Docker
+- Social Media Monitoring Tool (Oct 2024 - Dec 2024) | Python, NLP, Data Visualization, APIs
+- Smart Tire Analyzer (2024) | Python, Computer Vision (OpenCV)
+- AI Council - Multi-Agent Orchestration System (2025) | Python, FastAPI, React, Streamlit, ChromaDB, Ollama, RAG
 
 ----------------------------------------
 SKILLS
 ----------------------------------------
-Languages: Python, JavaScript, TypeScript, SQL, Bash, C++
-AI/LLM: GPT-4, LangChain, Prompt Engineering, Fine-Tuning, RAG, Hugging Face
-ML: Scikit-learn, XGBoost, Neural Networks, Feature Engineering
-Data Science: Pandas, NumPy, Matplotlib, EDA, A/B Testing
-Frontend: React, Next.js, Tailwind CSS, Framer Motion
-Backend: Node.js, Express, FastAPI, Flask, WebSockets
-Cloud: AWS, Docker, CI/CD, Git, GitHub Actions
-Databases: PostgreSQL, MongoDB, Redis, Elasticsearch
+Programming Languages: Python, JavaScript, TypeScript, Java, C, C++, PHP, R, Rust, Kotlin
+AI / LLM: LangChain, Prompt Engineering, Agentic AI, LLM Integration, Hugging Face, NLP
+Machine Learning: Scikit-learn, TensorFlow, PyTorch, Deep Learning, Classification, Regression, Clustering, Recommendation Systems
+Data and Analytics: SQL, Exploratory Data Analysis, Data Cleaning and Preprocessing, Feature Engineering, Data Visualization, NumPy, Pandas, OpenCV
+Web Development: React, FastAPI, Node.js, Socket.io, Laravel, Streamlit, HTML5, CSS3, Tailwind CSS, Bootstrap, Vite, REST APIs
+Databases, Cloud and DevOps: MySQL, Snowflake, Git, Docker, CI/CD, Microsoft Azure, Firebase, Prometheus, JWT, bcrypt
+Systems / Compilers: Rust, Go, Haskell, Assembly, LLVM IR, MLIR, ANTLR, C, C++, CUDA
+Formal Methods / Verification: Coq, Lean, F*, Dafny, TLA+, GAP
+Logic / Symbolic / Query Languages: Prolog, Lisp, Cypher, XQuery, Wolfram Language
+Hardware / Graphics / CAD: Verilog, SystemVerilog, GLSL, OpenSCAD
+Scientific / Data: Julia, Cython, WDL
+Enterprise / Platform-Specific: ABAP, AL, Apex (Salesforce), ASP.NET
+Security / Specialized: YARA, OPA (Rego), CodeQL, CIRCOM, Q#
 
 ----------------------------------------
 EDUCATION
 ----------------------------------------
-B.E. Computer Engineering -- Goa College of Engineering (2019-2023)
+Bachelor of Engineering -- Computer Science
+Agnel Institute of Technology and Design (2023 - 2026)
+
+Diploma -- Computer Science and Engineering
+Government Polytechnic, Panaji (2021 - 2024) | Result: 67.75%
+
+Secondary (Class X) -- CBSE
+Kendriya Vidyalaya No. 1, Vasco Da Gama, Goa (2017) | Result: 76.00%
 
 ========================================
 `;
